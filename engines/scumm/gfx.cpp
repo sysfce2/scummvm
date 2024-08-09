@@ -1292,11 +1292,13 @@ void ScummEngine::restoreCharsetBg() {
 				blit(screenBuf, vs->pitch, backBuf, vs->pitch, vs->w, vs->h, vs->format.bytesPerPixel);
 			}
 		} else {
-			// Clear area
-			if (_game.platform == Common::kPlatformNES)
-				memset(screenBuf, 0x1d, vs->h * vs->pitch);
-			else
-				memset(screenBuf, 0, vs->h * vs->pitch);
+			if (!(_game.version < 4 && _messageBannerActive && (getCurrentLights() & LIGHTMODE_flashlight_on))) {
+				// Clear area
+				if (_game.platform == Common::kPlatformNES)
+					memset(screenBuf, 0x1d, vs->h * vs->pitch);
+				else
+					memset(screenBuf, 0, vs->h * vs->pitch);
+			}
 		}
 
 		if (vs->hasTwoBuffers || _macScreen) {
@@ -1822,12 +1824,12 @@ void ScummEngine_v5::drawFlashlight() {
 
 	// Remove the flash light first if it was previously drawn
 	if (_flashlight.eraseFlag) {
-		markRectAsDirty(kMainVirtScreen, _flashlight.x, _flashlight.x + _flashlight.w,
-										_flashlight.y, _flashlight.y + _flashlight.h, USAGE_BIT_DIRTY);
-
 		if (_flashlight.buffer) {
 			fill(_flashlight.buffer, vs->pitch, blackColor, _flashlight.w, _flashlight.h, vs->format.bytesPerPixel);
 		}
+
+		markRectAsDirty(kMainVirtScreen, _flashlight.x, _flashlight.x + _flashlight.w,
+				_flashlight.y, _flashlight.y + _flashlight.h, USAGE_BIT_DIRTY);
 
 		_flashlight.eraseFlag = false;
 	}
@@ -1849,10 +1851,7 @@ void ScummEngine_v5::drawFlashlight() {
 	// - X position is a multiple of 8;
 	// - Y position is a multiple of 2.
 	//
-	// Failing to do so will create temporary glitches on the corners
-	// of the flashlight when attempting moving the mouse too fast...
-	// I'm not sure FM-Towns does this, so I'm leaving it off,
-	// which mean it will glitch just like with the old code...
+	// FM-Towns doesn't seem to do so...
 	if (_game.platform != Common::kPlatformFMTowns) {
 		x &= ~7;
 		y &= ~1;
@@ -1863,8 +1862,10 @@ void ScummEngine_v5::drawFlashlight() {
 	_flashlight.x = x - _flashlight.w / 2 - _screenStartStrip * 8;
 	_flashlight.y = y - _flashlight.h / 2;
 
-	if (_game.id == GID_LOOM && _game.version == 3 && _game.platform == Common::kPlatformFMTowns)
+	if (_game.id == GID_LOOM && _game.version == 3 && _game.platform != Common::kPlatformFMTowns) {
+		_flashlight.x += 4;
 		_flashlight.y -= 12;
+	}
 
 	// Clip the flashlight at the borders
 	if (_flashlight.x < 0)
@@ -2025,6 +2026,11 @@ void ScummEngine_v5::drawFlashlight() {
 			}
 		}
 	}
+
+	// Not in the original, but this avoids glitches on the borders of the flashlight, since
+	// otherwise the next rects refresh would have been on the next drawFlashlight() call...
+	markRectAsDirty(kMainVirtScreen, _flashlight.x, _flashlight.x + _flashlight.w,
+					_flashlight.y, _flashlight.y + _flashlight.h, USAGE_BIT_DIRTY);
 
 	_flashlight.eraseFlag = true;
 }
