@@ -314,7 +314,7 @@ void BaseRenderOpenGL3DShader::displayShadow(BaseObject *object, const Math::Vec
 		_flatShadowMaskShader->use();
 		_flatShadowMaskShader->setUniform("lightViewMatrix", lightViewMatrix);
 		_flatShadowMaskShader->setUniform("worldMatrix", shadowPosition);
-		_flatShadowMaskShader->setUniform("viewMatrix", _lastViewMatrix);
+		_flatShadowMaskShader->setUniform("viewMatrix", _viewMatrix);
 		_flatShadowMaskShader->setUniform("projMatrix", _projectionMatrix);
 		_flatShadowMaskShader->setUniform("shadowColor", _flatShadowColor);
 
@@ -344,7 +344,7 @@ BaseImage *BaseRenderOpenGL3DShader::takeScreenshot() {
 #endif
 	surface->create(_viewportRect.width(), _viewportRect.height(), format);
 
-	glReadPixels(_viewportRect.left, g_system->getHeight() - _viewportRect.bottom, _viewportRect.width(), _viewportRect.height(),
+	glReadPixels(_viewportRect.left, _viewportRect.height() - _viewportRect.bottom, _viewportRect.width(), _viewportRect.height(),
 	             GL_RGBA, GL_UNSIGNED_BYTE, surface->getPixels());
 	flipVertical(surface);
 	Graphics::Surface *converted = surface->convertTo(getPixelFormat());
@@ -470,8 +470,7 @@ bool BaseRenderOpenGL3DShader::setProjection() {
 
 	Math::Matrix4 m;
 	m.setData(matProj);
-	_projectionMatrix = m;
-	return true;
+	return setProjectionTransform(m);
 }
 
 bool BaseRenderOpenGL3DShader::setProjection2D() {
@@ -493,11 +492,11 @@ bool BaseRenderOpenGL3DShader::setProjection2D() {
 	return true;
 }
 
-void BaseRenderOpenGL3DShader::setWorldTransform(const Math::Matrix4 &transform) {
+bool BaseRenderOpenGL3DShader::setWorldTransform(const Math::Matrix4 &transform) {
 	Math::Matrix4 tmp = transform;
 	tmp.transpose();
 
-	Math::Matrix4 newInvertedTranspose = tmp * _lastViewMatrix;
+	Math::Matrix4 newInvertedTranspose = tmp * _viewMatrix;
 	newInvertedTranspose.inverse();
 	newInvertedTranspose.transpose();
 
@@ -507,6 +506,18 @@ void BaseRenderOpenGL3DShader::setWorldTransform(const Math::Matrix4 &transform)
 
 	_shadowVolumeShader->use();
 	_shadowVolumeShader->setUniform("modelMatrix", tmp);
+
+	return true;
+}
+
+bool BaseRenderOpenGL3DShader::setViewTransform(const Math::Matrix4 &transform) {
+	_viewMatrix = transform;
+	return true;
+}
+
+bool BaseRenderOpenGL3DShader::setProjectionTransform(const Math::Matrix4 &transform) {
+	_projectionMatrix = transform;
+	return true;
 }
 
 bool BaseRenderOpenGL3DShader::windowedBlt() {
@@ -649,23 +660,24 @@ bool BaseRenderOpenGL3DShader::setup3D(Camera3D *camera, bool force) {
 		if (camera)
 			_camera = camera;
 		if (_camera) {
+			Math::Matrix4 viewMatrix;
+			_camera->getViewMatrix(&viewMatrix);
+			setViewTransform(viewMatrix);
+
 			_fov = _camera->_fov;
 
 			if (_camera->_nearClipPlane >= 0.0f) {
 				_nearClipPlane = _camera->_nearClipPlane;
+			} else {
+				_nearClipPlane = DEFAULT_NEAR_PLANE;
 			}
 
 			if (_camera->_farClipPlane >= 0.0f) {
 				_farClipPlane = _camera->_farClipPlane;
+			} else {
+				_farClipPlane = DEFAULT_FAR_PLANE;
 			}
 
-			Math::Matrix4 viewMatrix;
-			_camera->getViewMatrix(&viewMatrix);
-			Math::Matrix4 cameraTranslate;
-			cameraTranslate.setPosition(-_camera->_position);
-			cameraTranslate.transpose();
-			viewMatrix = cameraTranslate * viewMatrix;
-			_lastViewMatrix = viewMatrix;
 		}
 
 		bool fogEnabled;
@@ -691,17 +703,17 @@ bool BaseRenderOpenGL3DShader::setup3D(Camera3D *camera, bool force) {
 	}
 
 	_xmodelShader->use();
-	_xmodelShader->setUniform("viewMatrix", _lastViewMatrix);
+	_xmodelShader->setUniform("viewMatrix", _viewMatrix);
 	_xmodelShader->setUniform("projMatrix", _projectionMatrix);
 	// this is 8 / 255, since 8 is the value used by wme (as a DWORD)
 	_xmodelShader->setUniform1f("alphaRef", 0.031f);
 
 	_geometryShader->use();
-	_geometryShader->setUniform("viewMatrix", _lastViewMatrix);
+	_geometryShader->setUniform("viewMatrix", _viewMatrix);
 	_geometryShader->setUniform("projMatrix", _projectionMatrix);
 
 	_shadowVolumeShader->use();
-	_shadowVolumeShader->setUniform("viewMatrix", _lastViewMatrix);
+	_shadowVolumeShader->setUniform("viewMatrix", _viewMatrix);
 	_shadowVolumeShader->setUniform("projMatrix", _projectionMatrix);
 
 	return true;

@@ -448,15 +448,15 @@ static void sceneDetailsWindows(TwinEEngine *engine) {
 		ImGuiEx::InputInt("Currently followed actor", &scene->_numObjFollow);
 
 		ImGui::Checkbox("Enable enhancements", &scene->_enableEnhancements);
-		ImGui::Checkbox("Render grid tiles", &scene->_enableGridTileRendering);
+		ImGui::Checkbox("Render grid tiles", &scene->_flagRenderGrid);
 		ImGuiEx::InputInt("Current script value", &scene->_currentScriptValue);
 		ImGuiEx::InputInt("Talking actor", &scene->_talkingActor);
 		ImGuiEx::InputInt("Cube jingle", &scene->_cubeJingle);
-		ImGuiEx::InputIVec3("New hero pos", scene->_newHeroPos);
+		ImGuiEx::InputIVec3("New hero pos", scene->_sceneStart);
 		ImGuiEx::InputInt("Alpha light", &scene->_alphaLight);
 		ImGuiEx::InputInt("Beta light", &scene->_betaLight);
 		ImGuiEx::InputInt("Fall Y position", &scene->_startYFalling);
-		ImGui::Text("Hero position type: %i", (int)scene->_heroPositionType);
+		ImGui::Text("Hero position type: %i", (int)scene->_flagChgCube);
 	}
 	ImGui::End();
 }
@@ -511,7 +511,7 @@ static void actorDetailsWindow(int &actorIdx, TwinEEngine *engine) {
 				ImGui::TableNextColumn();
 				ImGui::Text("Control mode");
 				ImGui::TableNextColumn();
-				ImGui::Text("%i", actor->_controlMode);
+				ImGui::Text("%i", actor->_move);
 				ImGui::TableNextColumn();
 				ImGui::Text("Delay");
 				ImGui::TableNextColumn();
@@ -698,7 +698,7 @@ static void actorDetailsWindow(int &actorIdx, TwinEEngine *engine) {
 
 static void gameStateMenu(TwinEEngine *engine) {
 	if (ImGui::BeginMenu("Game State")) {
-		int keys = engine->_gameState->_inventoryNumKeys;
+		int keys = engine->_gameState->_nbLittleKeys;
 		if (ImGui::InputInt("Keys", &keys)) {
 			engine->_gameState->setKeys(keys);
 		}
@@ -824,8 +824,21 @@ static void debuggerMenu(TwinEEngine *engine) {
 		if (ImGui::MenuItem("Center actor")) {
 			ActorStruct *actor = engine->_scene->getActor(OWN_ACTOR_SCENE_INDEX);
 			actor->_posObj = engine->_grid->_worldCube;
-			actor->_posObj.y += 1000;
+			actor->_posObj.y += 16 * SIZE_BRICK_Y;
+			int32 y = actor->_posObj.y - 1 - SIZE_BRICK_Y;
+			while (y > 0 && ShapeType::kNone == engine->_grid->worldColBrick(actor->_posObj.x, y, actor->_posObj.z)) {
+				y -= SIZE_BRICK_Y;
+			}
+			actor->_posObj.y = (y + SIZE_BRICK_Y) & ~(SIZE_BRICK_Y - 1);
 		}
+
+		if (ImGui::BeginMenu("Animations")) {
+			if (ImGui::MenuItem("Found item")) {
+				engine->_debugState->_playFoundItemAnimation = true;
+			}
+			ImGui::EndMenu();
+		}
+
 		if (ImGui::BeginMenu("Palettes")) {
 			LifeScriptContext fakeCtx(0, engine->_scene->_sceneHero);
 			if (ImGui::MenuItem("Show palette")) {

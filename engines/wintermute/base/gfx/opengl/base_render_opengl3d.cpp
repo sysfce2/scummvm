@@ -191,7 +191,7 @@ void BaseRenderOpenGL3D::displayShadow(BaseObject *object, const Math::Vector3d 
 
 	Math::Matrix4 worldTransformation = translation * rotation * scale;
 	worldTransformation.transpose();
-	worldTransformation = worldTransformation * _lastViewMatrix;
+	worldTransformation = worldTransformation * _viewMatrix;
 
 	glLoadMatrixf(worldTransformation.getData());
 
@@ -214,7 +214,7 @@ void BaseRenderOpenGL3D::displayShadow(BaseObject *object, const Math::Vector3d 
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
 	glDepthMask(GL_TRUE);
-	glLoadMatrixf(_lastViewMatrix.getData());
+	glLoadMatrixf(_viewMatrix.getData());
 }
 
 bool BaseRenderOpenGL3D::usingStencilBuffer() {
@@ -232,7 +232,7 @@ BaseImage *BaseRenderOpenGL3D::takeScreenshot() {
 #endif
 	surface->create(_viewportRect.width(), _viewportRect.height(), format);
 
-	glReadPixels(_viewportRect.left, g_system->getHeight() - _viewportRect.bottom, _viewportRect.width(), _viewportRect.height(),
+	glReadPixels(_viewportRect.left, _viewportRect.height() - _viewportRect.bottom, _viewportRect.width(), _viewportRect.height(),
 	             GL_RGBA, GL_UNSIGNED_BYTE, surface->getPixels());
 	flipVertical(surface);
 	Graphics::Surface *converted = surface->convertTo(getPixelFormat());
@@ -373,12 +373,7 @@ bool BaseRenderOpenGL3D::setProjection() {
 
 	Math::Matrix4 m;
 	m.setData(matProj);
-	_projectionMatrix = m;
-	glMatrixMode(GL_PROJECTION);
-	glLoadMatrixf(m.getData());
-
-	glMatrixMode(GL_MODELVIEW);
-	return true;
+	return setProjectionTransform(m);
 }
 
 bool BaseRenderOpenGL3D::setProjection2D() {
@@ -390,11 +385,28 @@ bool BaseRenderOpenGL3D::setProjection2D() {
 	return true;
 }
 
-void BaseRenderOpenGL3D::setWorldTransform(const Math::Matrix4 &transform) {
+bool BaseRenderOpenGL3D::setWorldTransform(const Math::Matrix4 &transform) {
+	_worldMatrix = transform;
 	Math::Matrix4 tmp = transform;
 	tmp.transpose();
-	Math::Matrix4 newModelViewTransform = tmp * _lastViewMatrix;
+	Math::Matrix4 newModelViewTransform = tmp * _viewMatrix;
 	glLoadMatrixf(newModelViewTransform.getData());
+	return true;
+}
+
+bool BaseRenderOpenGL3D::setViewTransform(const Math::Matrix4 &transform) {
+	_viewMatrix = transform;
+	glLoadMatrixf(transform.getData());
+	return true;
+}
+
+bool BaseRenderOpenGL3D::setProjectionTransform(const Math::Matrix4 &transform) {
+	_projectionMatrix = transform;
+	glMatrixMode(GL_PROJECTION);
+	glLoadMatrixf(transform.getData());
+
+	glMatrixMode(GL_MODELVIEW);
+	return true;
 }
 
 bool BaseRenderOpenGL3D::windowedBlt() {
@@ -518,23 +530,26 @@ bool BaseRenderOpenGL3D::setup3D(Camera3D *camera, bool force) {
 		if (camera)
 			_camera = camera;
 		if (_camera) {
+			Math::Matrix4 viewMatrix;
+			_camera->getViewMatrix(&viewMatrix);
+			setViewTransform(viewMatrix);
+
 			_fov = _camera->_fov;
 
 			if (_camera->_nearClipPlane >= 0.0f) {
 				_nearClipPlane = _camera->_nearClipPlane;
+			} else {
+				_nearClipPlane = DEFAULT_NEAR_PLANE;
 			}
 
 			if (_camera->_farClipPlane >= 0.0f) {
 				_farClipPlane = _camera->_farClipPlane;
+			} else {
+				_farClipPlane = DEFAULT_FAR_PLANE;
 			}
-
-			Math::Matrix4 viewMatrix;
-			_camera->getViewMatrix(&viewMatrix);
-			glLoadMatrixf(viewMatrix.getData());
-			glTranslatef(-_camera->_position.x(), -_camera->_position.y(), -_camera->_position.z());
-			glGetFloatv(GL_MODELVIEW_MATRIX, _lastViewMatrix.getData());
 		} else {
-			glLoadMatrixf(_lastViewMatrix.getData());
+			_nearClipPlane = DEFAULT_NEAR_PLANE;
+			_farClipPlane = DEFAULT_FAR_PLANE;
 		}
 
 		for (int i = 0; i < getMaxActiveLights(); ++i) {
@@ -545,7 +560,6 @@ bool BaseRenderOpenGL3D::setup3D(Camera3D *camera, bool force) {
 		bool fogEnabled;
 		uint32 fogColor;
 		float fogStart, fogEnd;
-
 		_gameRef->getFogParams(&fogEnabled, &fogColor, &fogStart, &fogEnd);
 		if (fogEnabled) {
 			glEnable(GL_FOG);

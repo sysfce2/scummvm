@@ -550,7 +550,7 @@ void Room304::handlingStickAndSword() {
 	case 23:
 		terminateMachineAndNull(_headUp2);
 		series_unload(_suit2);
-		series_ranged_play("MC UNITES LF", 1, 1, 83, 98, 100, 0xf05, 7, 25);
+		series_ranged_play("MC UNTIES LF", 1, 1, 83, 98, 100, 0xf05, 7, 25);
 		digi_play("304f02", 1);
 		break;
 
@@ -595,7 +595,7 @@ void Room304::handlingStickAndSword() {
 		break;
 
 	case 33:
-		_headUp2 = series_ranged_play("fl talk 1", -1, 0, 0, 0, 100, 0x200, 250);
+		_headUp2 = series_ranged_play("lf talk 1", -1, 0, 0, 0, 100, 0x200, 250);
 		break;
 
 	case 34:
@@ -639,7 +639,7 @@ void Room304::handlingStickAndSword() {
 		series_unload(_suit1);
 		_safe1 = series_load("rip opens safe part 1");
 		_safe2 = series_load("rip opens safe part 2");
-		ws_walk(510, 300, 0, 43, 3);
+		ws_walk(510, 300, nullptr, 43, 3);
 		digi_preload("304r51");
 		digi_play("304r51", 1, 255, 79);
 		break;
@@ -784,7 +784,7 @@ void Room304::handlingStickAndSword() {
 		break;
 
 	case 69:
-		ws_walk(458, 263, 0, -1, 2);
+		ws_walk(458, 263, nullptr, -1, 2);
 		kernel_timing_trigger(30, 678);
 		break;
 

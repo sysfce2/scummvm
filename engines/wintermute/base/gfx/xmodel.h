@@ -30,6 +30,7 @@
 
 #include "engines/wintermute/base/base_object.h"
 #include "engines/wintermute/base/base_sprite.h"
+#include "engines/wintermute/base/gfx/xmath.h"
 #include "engines/wintermute/coll_templ.h"
 #include "engines/wintermute/math/rect32.h"
 #include "engines/wintermute/video/video_theora_player.h"
@@ -145,7 +146,6 @@ public:
 	static bool loadName(BaseNamedObject *obj, XFileData *data);
 	static bool loadName(Common::String &targetStr, XFileData *data);
 
-	Math::Matrix4 _lastWorldMat;
 	Rect32 _boundingRect;
 	BaseObject *_owner;
 
@@ -177,15 +177,16 @@ private:
 	bool findBones(bool animOnly = false, XModel *parentModel = nullptr);
 
 	void updateBoundingRect();
-	void static inline updateRect(Rect32 *rc, Math::Vector3d vec);
+	void static inline updateRect(Rect32 *rc, DXVector3 *vec);
 	Rect32 _drawingViewport;
+	Math::Matrix4 _lastWorldMat;
 	Math::Matrix4 _lastViewMat;
 	Math::Matrix4 _lastProjMat;
 	int32 _lastOffsetX;
 	int32 _lastOffsetY;
 
-	Math::Vector3d _BBoxStart;
-	Math::Vector3d _BBoxEnd;
+	DXVector3 _BBoxStart;
+	DXVector3 _BBoxEnd;
 
 protected:
 	BaseArray<const char*> _mergedModels;

@@ -42,9 +42,9 @@ namespace TwinE {
 Actor::Actor(TwinEEngine *engine) : _engine(engine) {
 }
 
-void Actor::restartHeroScene() {
+void Actor::restartPerso() {
 	ActorStruct *sceneHero = _engine->_scene->_sceneHero;
-	sceneHero->_controlMode = ControlMode::kManual;
+	sceneHero->_move = ControlMode::kManual;
 	memset(&sceneHero->_workFlags, 0, sizeof(sceneHero->_workFlags));
 	memset(&sceneHero->_flags, 0, sizeof(sceneHero->_flags));
 
@@ -376,6 +376,7 @@ void Actor::hitObj(int32 actorIdx, int32 actorIdxAttacked, int32 hitforce, int32
 	}
 
 	actor->_hitBy = actorIdx;
+	debugC(1, TwinE::kDebugCollision, "Actor %d was hit by %d", actorIdxAttacked, actorIdx);
 
 	if (actor->_armor <= hitforce) {
 		if (actor->_genAnim == AnimationTypes::kBigHit || actor->_genAnim == AnimationTypes::kHit2) {

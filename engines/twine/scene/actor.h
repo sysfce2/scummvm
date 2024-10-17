@@ -138,7 +138,7 @@ struct BonusParameter {
 /**
  * Actors structure
  *
- * Such as characters, doors, moving plataforms, invisible actors, ...
+ * Such as characters, doors, moving platforms, invisible actors, ...
  */
 class ActorStruct { // T_OBJET
 private:
@@ -194,7 +194,7 @@ public:
 	BonusParameter _bonusParameter;
 	int32 _beta = 0; // facing angle of actor. Minumum is 0 (SW). Going counter clock wise
 	int32 _srot = 40; // speed of rotation
-	ControlMode _controlMode = ControlMode::kNoMove; // Move
+	ControlMode _move = ControlMode::kNoMove; // Move
 	int32 _delayInMillis = 0; // Info
 	int32 _cropLeft = 0;      // Info
 	int32 _cropTop = 0;       // Info1
@@ -326,7 +326,7 @@ public:
 	void setFrame(int32 actorIdx, uint32 frame);
 
 	/** Restart hero variables while opening new scenes */
-	void restartHeroScene();
+	void restartPerso();
 
 	/** Load hero 3D body and animations */
 	void loadHeroEntities();
@@ -368,7 +368,7 @@ public:
 	void hitObj(int32 actorIdx, int32 actorIdxAttacked, int32 strengthOfHit, int32 angle);
 
 	/** Process actor carrier */
-	void checkCarrier(int32 actorIdx); // CheckCarrier
+	void checkCarrier(int32 actorIdx);
 
 	/** Process actor extra bonus */
 	void giveExtraBonus(int32 actorIdx);

@@ -317,7 +317,7 @@ static ReturnType processLifeConditions(TwinEEngine *engine, LifeScriptContext &
 	}
 	case kcNUM_LITTLE_KEYS:
 		debugCN(3, kDebugLevels::kDebugScriptsLife, "num_little_keys(");
-		engine->_scene->_currentScriptValue = engine->_gameState->_inventoryNumKeys;
+		engine->_scene->_currentScriptValue = engine->_gameState->_nbLittleKeys;
 		break;
 	case kcNUM_GOLD_PIECES:
 		debugCN(3, kDebugLevels::kDebugScriptsLife, "num_gold_pieces(");
@@ -958,8 +958,8 @@ int32 ScriptLife::lFALLABLE(TwinEEngine *engine, LifeScriptContext &ctx) {
 int32 ScriptLife::lSET_DIRMODE(TwinEEngine *engine, LifeScriptContext &ctx) {
 	const int32 controlMode = ctx.stream.readByte();
 
-	ctx.actor->_controlMode = (ControlMode)controlMode;
-	if (ctx.actor->_controlMode == ControlMode::kFollow) {
+	ctx.actor->_move = (ControlMode)controlMode;
+	if (ctx.actor->_move == ControlMode::kFollow) {
 		ctx.actor->_followedActor = ctx.stream.readByte();
 		debugC(3, kDebugLevels::kDebugScriptsLife, "LIFE::SET_DIRMODE(%i, %i)", (int)controlMode, (int)ctx.actor->_followedActor);
 	} else {
@@ -978,9 +978,9 @@ int32 ScriptLife::lSET_DIRMODE_OBJ(TwinEEngine *engine, LifeScriptContext &ctx) 
 	const int32 controlMode = ctx.stream.readByte();
 
 	ActorStruct *otherActor = engine->_scene->getActor(otherActorIdx);
-	otherActor->_controlMode = (ControlMode)controlMode;
+	otherActor->_move = (ControlMode)controlMode;
 	// TODO: should ControlMode::kSameXZ be taken into account, too - see processSameXZAction
-	if (otherActor->_controlMode == ControlMode::kFollow || ctx.actor->_controlMode == ControlMode::kFollow2) {
+	if (otherActor->_move == ControlMode::kFollow || ctx.actor->_move == ControlMode::kFollow2) {
 		otherActor->_followedActor = ctx.stream.readByte();
 		debugC(3, kDebugLevels::kDebugScriptsLife, "LIFE::SET_DIRMODE_OBJ(%i, %i, %i)", (int)otherActorIdx, (int)controlMode, (int)otherActor->_followedActor);
 	} else {
@@ -1326,7 +1326,7 @@ int32 ScriptLife::lCHANGE_CUBE(TwinEEngine *engine, LifeScriptContext &ctx) {
 	const int32 sceneIdx = ctx.stream.readByte();
 	debugC(3, kDebugLevels::kDebugScriptsLife, "LIFE::CHANGE_CUBE(%i)", (int)sceneIdx);
 	engine->_scene->_newCube = sceneIdx;
-	engine->_scene->_heroPositionType = ScenePositionType::kScene;
+	engine->_scene->_flagChgCube = ScenePositionType::kScene;
 	return 0;
 }
 
@@ -1691,9 +1691,9 @@ int32 ScriptLife::lSUB_FUEL(TwinEEngine *engine, LifeScriptContext &ctx) {
  * @note Opcode @c 0x4C
  */
 int32 ScriptLife::lSET_GRM(TwinEEngine *engine, LifeScriptContext &ctx) {
-	engine->_grid->_cellingGridIdx = ctx.stream.readByte();
-	debugC(3, kDebugLevels::kDebugScriptsLife, "LIFE::SET_GRM(%i)", (int)engine->_grid->_cellingGridIdx);
-	engine->_grid->initCellingGrid(engine->_grid->_cellingGridIdx);
+	engine->_grid->_indexGrm = ctx.stream.readByte();
+	debugC(3, kDebugLevels::kDebugScriptsLife, "LIFE::SET_GRM(%i)", (int)engine->_grid->_indexGrm);
+	engine->_grid->initCellingGrid(engine->_grid->_indexGrm);
 	return 0;
 }
 
@@ -1760,9 +1760,9 @@ int32 ScriptLife::lBETA(TwinEEngine *engine, LifeScriptContext &ctx) {
  */
 int32 ScriptLife::lGRM_OFF(TwinEEngine *engine, LifeScriptContext &ctx) {
 	debugC(3, kDebugLevels::kDebugScriptsLife, "LIFE::GRM_OFF()");
-	if (engine->_grid->_cellingGridIdx != -1) {
-		engine->_grid->_useCellingGrid = -1;
-		engine->_grid->_cellingGridIdx = -1;
+	if (engine->_grid->_indexGrm != -1) {
+		engine->_grid->_zoneGrm = -1;
+		engine->_grid->_indexGrm = -1;
 		engine->_grid->copyMapToCube();
 		engine->_redraw->drawScene(true);
 	}
@@ -2001,7 +2001,7 @@ int32 ScriptLife::lTHE_END(TwinEEngine *engine, LifeScriptContext &ctx) {
 	// TODO: lba2 has a different ending
 	engine->_scene->_numCube = LBA1SceneId::Polar_Island_Final_Battle;
 	engine->_actor->_heroBehaviour = engine->_actor->_previousHeroBehaviour;
-	engine->_scene->_newHeroPos.x = -1;
+	engine->_scene->_sceneStart.x = -1;
 	engine->_scene->_sceneHero->_beta = engine->_actor->_previousHeroAngle;
 	engine->autoSave();
 	return 1; // break;
@@ -2036,7 +2036,7 @@ int32 ScriptLife::lPROJ_3D(TwinEEngine *engine, LifeScriptContext &ctx) {
 	debugC(3, kDebugLevels::kDebugScriptsLife, "LIFE::PROJ_3D()");
 	// TODO: only used for credits scene? If not, then move the credits related code into the menu->showCredits method
 	engine->_screens->copyScreen(engine->_frontVideoBuffer, engine->_workVideoBuffer);
-	engine->_scene->_enableGridTileRendering = false;
+	engine->_scene->_flagRenderGrid = false;
 
 	engine->_renderer->setProjection(engine->width() / 2, engine->height() / 2, 128, 1024, 1024);
 	engine->_renderer->setFollowCamera(0, 1500, 0, 25, -128, 0, 13000);

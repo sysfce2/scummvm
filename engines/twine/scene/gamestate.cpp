@@ -91,7 +91,7 @@ void GameState::initHeroVars() {
 	_inventoryNumLeafsBox = 2;
 	_inventoryNumLeafs = 2;
 	_goldPieces = 0;
-	_inventoryNumKeys = 0;
+	_nbLittleKeys = 0;
 	_magicPoint = 0;
 
 	_usingSabre = false;
@@ -111,9 +111,9 @@ void GameState::initEngineVars() {
 	initGameStateVars();
 	initHeroVars();
 
-	_engine->_scene->_newHeroPos.x = 16 * SIZE_BRICK_XZ;
-	_engine->_scene->_newHeroPos.y = 24 * SIZE_BRICK_Y;
-	_engine->_scene->_newHeroPos.z = 16 * SIZE_BRICK_XZ;
+	_engine->_scene->_sceneStart.x = 16 * SIZE_BRICK_XZ;
+	_engine->_scene->_sceneStart.y = 24 * SIZE_BRICK_Y;
+	_engine->_scene->_sceneStart.z = 16 * SIZE_BRICK_XZ;
 
 	_engine->_scene->_numCube = SCENE_CEILING_GRID_FADE_1;
 	_engine->_scene->_newCube = LBA1SceneId::Citadel_Island_Prison;
@@ -125,7 +125,7 @@ void GameState::initEngineVars() {
 	_inventoryNumLeafsBox = 2;
 	_magicPoint = 0;
 	_goldPieces = 0;
-	_inventoryNumKeys = 0;
+	_nbLittleKeys = 0;
 	_inventoryNumGas = 0;
 
 	_engine->_actor->_cropBottomScreen = 0;
@@ -194,9 +194,9 @@ bool GameState::loadGame(Common::SeekableReadStream *file) {
 	_magicLevelIdx = file->readByte();
 	setMagicPoints(file->readByte());
 	setLeafBoxes(file->readByte());
-	_engine->_scene->_newHeroPos.x = file->readSint16LE();
-	_engine->_scene->_newHeroPos.y = file->readSint16LE();
-	_engine->_scene->_newHeroPos.z = file->readSint16LE();
+	_engine->_scene->_sceneStart.x = file->readSint16LE();
+	_engine->_scene->_sceneStart.y = file->readSint16LE();
+	_engine->_scene->_sceneStart.z = file->readSint16LE();
 	_engine->_scene->_sceneHero->_beta = ToAngle(file->readSint16LE());
 	_engine->_actor->_previousHeroAngle = _engine->_scene->_sceneHero->_beta;
 	_engine->_scene->_sceneHero->_genBody = (BodyType)file->readByte();
@@ -227,7 +227,7 @@ bool GameState::loadGame(Common::SeekableReadStream *file) {
 	}
 
 	_engine->_scene->_numCube = SCENE_CEILING_GRID_FADE_1;
-	_engine->_scene->_heroPositionType = ScenePositionType::kReborn;
+	_engine->_scene->_flagChgCube = ScenePositionType::kReborn;
 	return true;
 }
 
@@ -266,9 +266,9 @@ bool GameState::saveGame(Common::WriteStream *file) {
 	file->writeByte(_inventoryNumLeafsBox);
 	// we don't save the whole scene state - so we have to make sure that the hero is
 	// respawned at the start of the scene - and not at its current position
-	file->writeSint16LE(_engine->_scene->_newHeroPos.x);
-	file->writeSint16LE(_engine->_scene->_newHeroPos.y);
-	file->writeSint16LE(_engine->_scene->_newHeroPos.z);
+	file->writeSint16LE(_engine->_scene->_sceneStart.x);
+	file->writeSint16LE(_engine->_scene->_sceneStart.y);
+	file->writeSint16LE(_engine->_scene->_sceneStart.z);
 	file->writeSint16LE(FromAngle(_engine->_scene->_sceneHero->_beta));
 	file->writeByte((uint8)_engine->_scene->_sceneHero->_genBody);
 
@@ -349,12 +349,12 @@ void GameState::doFoundObj(InventoryItems item) {
 	_engine->_renderer->renderIsoModel(bodyPos, LBAAngles::ANGLE_0, LBAAngles::ANGLE_45, LBAAngles::ANGLE_0, bodyData, modelRect);
 	_engine->_interface->setClip(modelRect);
 
-	const int32 itemX = (_engine->_scene->_sceneHero->_posObj.x + SIZE_BRICK_Y) / SIZE_BRICK_XZ;
+	const int32 itemX = (_engine->_scene->_sceneHero->_posObj.x + DEMI_BRICK_XZ) / SIZE_BRICK_XZ;
 	int32 itemY = _engine->_scene->_sceneHero->_posObj.y / SIZE_BRICK_Y;
 	if (_engine->_scene->_sceneHero->brickShape() != ShapeType::kNone) {
 		itemY++;
 	}
-	const int32 itemZ = (_engine->_scene->_sceneHero->_posObj.z + SIZE_BRICK_Y) / SIZE_BRICK_XZ;
+	const int32 itemZ = (_engine->_scene->_sceneHero->_posObj.z + DEMI_BRICK_XZ) / SIZE_BRICK_XZ;
 
 	_engine->_grid->drawOverBrick(itemX, itemY, itemZ);
 
@@ -380,24 +380,23 @@ void GameState::doFoundObj(InventoryItems item) {
 
 	_engine->_text->initVoxToPlayTextId((TextId)item);
 
-	const int32 bodyAnimIdx = _engine->_animations->searchAnim(AnimationTypes::kFoundItem);
-	const AnimData &currentAnimData = _engine->_resources->_animData[bodyAnimIdx];
-
-	AnimTimerDataStruct tmpAnimTimer = _engine->_scene->_sceneHero->_animTimerData;
+	const int32 bodyAnimIdx = _engine->_animations->searchAnim(AnimationTypes::kFoundItem, OWN_ACTOR_SCENE_INDEX);
+	const AnimData &ptranim = _engine->_resources->_animData[bodyAnimIdx];
 
 	_engine->_animations->stockInterAnim(bodyData, &_engine->_scene->_sceneHero->_animTimerData);
 
-	uint currentAnimState = 0;
+	uint frameanim = 0;
 
-	_engine->_redraw->_numOfRedrawBox = 0;
+	_engine->_redraw->_nbOptPhysBox = 0;
 
+	AnimTimerDataStruct animTimerData;
 	ScopedKeyMap uiKeyMap(_engine, uiKeyMapId);
 	int16 itemAngle = LBAAngles::ANGLE_0;
 	for (;;) {
 		FrameMarker frame(_engine, 66);
 		_engine->_interface->unsetClip();
-		_engine->_redraw->_currNumOfRedrawBox = 0;
-		_engine->_redraw->blitBackgroundAreas();
+		_engine->_redraw->_nbPhysBox = 0;
+		_engine->_redraw->clsBoxes();
 		_engine->_interface->shadeBox(boxRect, 4);
 
 		_engine->_interface->setClip(boxRect);
@@ -407,21 +406,21 @@ void GameState::doFoundObj(InventoryItems item) {
 		_engine->_renderer->draw3dObject(projPos.x, projPos.y, _engine->_resources->_inventoryTable[item], itemAngle, 10000);
 
 		_engine->_menu->drawRectBorders(boxRect);
-		_engine->_redraw->addRedrawArea(boxRect);
+		_engine->_redraw->addPhysBox(boxRect);
 		_engine->_interface->unsetClip();
 		init3DGame();
 
-		if (_engine->_animations->setInterAnimObjet(currentAnimState, currentAnimData, bodyData, &_engine->_scene->_sceneHero->_animTimerData)) {
-			currentAnimState++; // keyframe
-			if (currentAnimState >= currentAnimData.getNbFramesAnim()) {
-				currentAnimState = currentAnimData.getLoopFrame();
+		if (_engine->_animations->setInterAnimObjet(frameanim, ptranim, bodyData, &animTimerData)) {
+			frameanim++; // keyframe
+			if (frameanim >= ptranim.getNbFramesAnim()) {
+				frameanim = ptranim.getLoopFrame();
 			}
 		}
 
 		_engine->_renderer->renderIsoModel(bodyPos, LBAAngles::ANGLE_0, LBAAngles::ANGLE_45, LBAAngles::ANGLE_0, bodyData, modelRect);
 		_engine->_interface->setClip(modelRect);
 		_engine->_grid->drawOverBrick(itemX, itemY, itemZ);
-		_engine->_redraw->addRedrawArea(modelRect);
+		_engine->_redraw->addPhysBox(modelRect);
 
 		if (textState == ProgressiveTextState::ContinueRunning) {
 			_engine->_interface->unsetClip();
@@ -430,7 +429,7 @@ void GameState::doFoundObj(InventoryItems item) {
 			_engine->_text->fadeInRemainingChars();
 		}
 
-		_engine->_redraw->flipRedrawAreas();
+		_engine->_redraw->flipBoxes();
 
 		_engine->readKeys();
 		if (_engine->_input->toggleAbortAction()) {
@@ -466,9 +465,6 @@ void GameState::doFoundObj(InventoryItems item) {
 	init3DGame();
 	_engine->_text->initSceneTextBank();
 	_engine->_text->stopVox(_engine->_text->_currDialTextEntry);
-
-	_engine->_scene->_sceneHero->_animTimerData = tmpAnimTimer;
-	_engine->_interface->unsetClip();
 }
 
 void GameState::gameAskChoice(TextId choiceIdx) {
@@ -613,12 +609,12 @@ int16 GameState::setZlitos(int16 value) {
 }
 
 int16 GameState::setKeys(int16 value) {
-	_inventoryNumKeys = MAX<int16>(0, value);
-	return _inventoryNumKeys;
+	_nbLittleKeys = MAX<int16>(0, value);
+	return _nbLittleKeys;
 }
 
 void GameState::addKeys(int16 val) {
-	setKeys(_inventoryNumKeys + val);
+	setKeys(_nbLittleKeys + val);
 }
 
 void GameState::addKashes(int16 val) {

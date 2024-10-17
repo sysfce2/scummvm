@@ -52,7 +52,7 @@ Redraw::Redraw(TwinEEngine *engine) : _engine(engine), _bubbleSpriteIndex(SPRITE
 void Redraw::addRedrawCurrentArea(const Common::Rect &redrawArea) {
 	const int32 area = (redrawArea.right - redrawArea.left) * (redrawArea.bottom - redrawArea.top);
 
-	for (int32 i = 0; i < _numOfRedrawBox; ++i) {
+	for (int32 i = 0; i < _nbOptPhysBox; ++i) {
 		Common::Rect &rect = _currentRedrawList[i];
 		const int32 leftValue = MIN<int32>(redrawArea.left, rect.left);
 		const int32 rightValue = MAX<int32>(redrawArea.right, rect.right);
@@ -73,7 +73,7 @@ void Redraw::addRedrawCurrentArea(const Common::Rect &redrawArea) {
 		}
 	}
 
-	Common::Rect &rect = _currentRedrawList[_numOfRedrawBox];
+	Common::Rect &rect = _currentRedrawList[_nbOptPhysBox];
 	rect.left = redrawArea.left;
 	rect.top = redrawArea.top;
 	rect.right = redrawArea.right;
@@ -82,10 +82,10 @@ void Redraw::addRedrawCurrentArea(const Common::Rect &redrawArea) {
 	assert(rect.left <= rect.right);
 	assert(rect.top <= rect.bottom);
 
-	_numOfRedrawBox++;
+	_nbOptPhysBox++;
 }
 
-void Redraw::addRedrawArea(const Common::Rect &rect) {
+void Redraw::addPhysBox(const Common::Rect &rect) {
 	if (!rect.isValidRect()) {
 		return;
 	}
@@ -110,35 +110,35 @@ void Redraw::addRedrawArea(int32 left, int32 top, int32 right, int32 bottom) {
 		return;
 	}
 
-	Common::Rect &rect = _nextRedrawList[_currNumOfRedrawBox];
+	Common::Rect &rect = _nextRedrawList[_nbPhysBox];
 	rect.left = left;
 	rect.top = top;
 	rect.right = right;
 	rect.bottom = bottom;
 
-	_currNumOfRedrawBox++;
+	_nbPhysBox++;
 
 	addRedrawCurrentArea(rect);
 }
 
 void Redraw::moveNextAreas() {
-	_numOfRedrawBox = 0;
+	_nbOptPhysBox = 0;
 
-	for (int32 i = 0; i < _currNumOfRedrawBox; i++) {
+	for (int32 i = 0; i < _nbPhysBox; i++) {
 		addRedrawCurrentArea(_nextRedrawList[i]);
 	}
 }
 
-void Redraw::flipRedrawAreas() {
-	for (int32 i = 0; i < _numOfRedrawBox; i++) { // redraw areas on screen
+void Redraw::flipBoxes() {
+	for (int32 i = 0; i < _nbOptPhysBox; i++) { // redraw areas on screen
 		_engine->copyBlockPhys(_currentRedrawList[i]);
 	}
 
 	moveNextAreas();
 }
 
-void Redraw::blitBackgroundAreas() {
-	for (int32 i = 0; i < _numOfRedrawBox; i++) {
+void Redraw::clsBoxes() {
+	for (int32 i = 0; i < _nbOptPhysBox; i++) {
 		_engine->blitWorkToFront(_currentRedrawList[i]);
 	}
 }
@@ -248,7 +248,7 @@ int32 Redraw::fillActorDrawingList(DrawListStruct *drawList, bool flagflip) {
 		actor->_workFlags.bWasDrawn = 0; // reset visible state
 		actor->_workFlags.bIsTargetable = 0;
 
-		if (_engine->_grid->_useCellingGrid != -1 && actor->_posObj.y > _engine->_scene->_sceneZones[_engine->_grid->_cellingGridIdx].maxs.y) {
+		if (_engine->_grid->_zoneGrm != -1 && actor->_posObj.y > _engine->_scene->_sceneZones[_engine->_grid->_indexGrm].maxs.y) {
 			continue;
 		}
 		// no redraw required
@@ -392,19 +392,19 @@ void Redraw::processDrawListShadows(const DrawListStruct &drawCmd) {
 
 		_engine->_grid->drawOverBrick(tmpX, tmpY, tmpZ);
 
-		addRedrawArea(_engine->_interface->_clip);
+		addPhysBox(_engine->_interface->_clip);
 
 		_engine->_debugState->drawClip(renderRect);
 	}
 	_engine->_interface->unsetClip();
 }
 
-void Redraw::processDrawListActors(const DrawListStruct &drawCmd, bool bgRedraw) {
+void Redraw::processDrawListActors(const DrawListStruct &drawCmd, bool flagflip) {
 	const int32 actorIdx = drawCmd.numObj;
 	ActorStruct *actor = _engine->_scene->getActor(actorIdx);
 	if (actor->_anim >= 0) {
 		const AnimData &animData = _engine->_resources->_animData[actor->_anim];
-		_engine->_animations->setInterAnimObjet(actor->_frame, animData, actor->_entityDataPtr->getBody(actor->_body), &actor->_animTimerData);
+		_engine->_animations->setInterAnimObjet2(actor->_frame, animData, actor->_entityDataPtr->getBody(actor->_body), &actor->_animTimerData);
 	}
 
 	const IVec3 &delta = actor->posObj() - _engine->_grid->_worldCube;
@@ -432,10 +432,10 @@ void Redraw::processDrawListActors(const DrawListStruct &drawCmd, bool bgRedraw)
 
 		_engine->_grid->drawOverBrick(tempX, tempY, tempZ);
 
-		addRedrawArea(_engine->_interface->_clip);
+		addPhysBox(_engine->_interface->_clip);
 
-		if (actor->_flags.bIsBackgrounded && bgRedraw) {
-			_engine->blitFrontToWork(_engine->_interface->_clip);
+		if (actor->_flags.bIsBackgrounded && flagflip) {
+			_engine->copyBlock(_engine->_interface->_clip);
 		}
 
 		_engine->_debugState->drawClip(_engine->_interface->_clip);
@@ -493,10 +493,10 @@ void Redraw::processDrawListActorSprites(const DrawListStruct &drawCmd, bool bgR
 			_engine->_grid->drawOverBrick3(xm, ym, zm);
 		}
 
-		addRedrawArea(_engine->_interface->_clip);
+		addPhysBox(_engine->_interface->_clip);
 
 		if (actor->_flags.bIsBackgrounded && bgRedraw) {
-			_engine->blitFrontToWork(_engine->_interface->_clip);
+			_engine->copyBlock(_engine->_interface->_clip);
 		}
 
 		_engine->_debugState->drawClip(renderRect);
@@ -534,7 +534,7 @@ void Redraw::processDrawListExtras(const DrawListStruct &drawCmd) {
 		const int32 zm = (extra->pos.z + DEMI_BRICK_XZ) / SIZE_BRICK_XZ;
 
 		_engine->_grid->drawOverBrick(xm, ym, zm);
-		addRedrawArea(_engine->_interface->_clip);
+		addPhysBox(_engine->_interface->_clip);
 
 		// show clipping area
 		//drawRectBorders(renderRect);
@@ -739,7 +739,7 @@ void Redraw::renderOverlays() {
 
 			_engine->_grid->drawSprite(renderRect.left, renderRect.top, spritePtr);
 
-			addRedrawArea(_engine->_interface->_clip);
+			addPhysBox(_engine->_interface->_clip);
 			break;
 		}
 		case OverlayType::koNumber: {
@@ -761,7 +761,7 @@ void Redraw::renderOverlays() {
 
 			_engine->_text->drawText(renderRect.left, renderRect.top, text);
 
-			addRedrawArea(_engine->_interface->_clip);
+			addPhysBox(_engine->_interface->_clip);
 
 			_engine->_interface->unsetClip();
 			break;
@@ -787,7 +787,7 @@ void Redraw::renderOverlays() {
 
 			_engine->_text->drawText(renderRect.left, renderRect.top, text);
 
-			addRedrawArea(_engine->_interface->_clip);
+			addPhysBox(_engine->_interface->_clip);
 			_engine->_interface->unsetClip();
 			break;
 		}
@@ -802,7 +802,7 @@ void Redraw::renderOverlays() {
 			_overlayRotation += 1; // overlayRotation += 8;
 			_engine->_renderer->draw3dObject(40, 40, bodyPtr, _overlayRotation, 16000);
 			_engine->_menu->drawRectBorders(rect);
-			addRedrawArea(rect);
+			addPhysBox(rect);
 			_engine->_gameState->init3DGame();
 			_engine->_interface->unsetClip();
 			break;
@@ -828,7 +828,7 @@ void Redraw::renderOverlays() {
 
 			_engine->_text->drawText(renderRect.left, renderRect.top, text);
 
-			addRedrawArea(_engine->_interface->_clip);
+			addPhysBox(_engine->_interface->_clip);
 			_engine->_interface->unsetClip();
 			break;
 		}
@@ -869,45 +869,42 @@ void Redraw::renderText() {
 	_engine->_text->drawText(x, y, _text.c_str(), true);
 	_engine->copyBlockPhys(x, y, x + width, y + height);
 	const Common::Rect redraw(x, y, x + width, y + height);
-	addRedrawArea(redraw);
+	addPhysBox(redraw);
 }
 
-void Redraw::drawScene(bool bgRedraw) { // AffScene
+void Redraw::drawScene(bool flagflip) { // AffScene
 	int32 tmp_projPosX = _projPosScreen.x;
 	int32 tmp_projPosY = _projPosScreen.y;
 
 	_engine->_interface->unsetClip();
 
-	if (bgRedraw) {
+	if (!flagflip) {
+		clsBoxes();
+	} else {
 		_engine->saveTimer(false);
 		if (_engine->_scene->_newCube != SCENE_CEILING_GRID_FADE_1 && _engine->_scene->_newCube != SCENE_CEILING_GRID_FADE_2) {
 			_engine->_screens->fadeToBlack(_engine->_screens->_ptrPal);
 		}
-		_engine->_screens->clearScreen();
 
 		_engine->_grid->redrawGrid();
-		const IVec3 &projPos = _engine->_renderer->projectPoint(-_engine->_grid->_worldCube);
-		_projPosScreen.x = projPos.x;
-		_projPosScreen.y = projPos.y;
 
 		updateOverlayTypePosition(tmp_projPosX, tmp_projPosY, _projPosScreen.x, _projPosScreen.y);
+
 		_engine->saveFrontBuffer();
 
 		if (_engine->_scene->_newCube != SCENE_CEILING_GRID_FADE_1 && _engine->_scene->_newCube != SCENE_CEILING_GRID_FADE_2) {
 			_engine->_screens->fadeToPal(_engine->_screens->_ptrPal);
 		}
-	} else {
-		blitBackgroundAreas();
 	}
 
 	DrawListStruct drawList[NUM_MAX_ACTORS + EXTRA_MAX_ENTRIES]; // ListTri[MAX_OBJECTS + MAX_EXTRAS]
-	int32 drawListPos = fillActorDrawingList(drawList, bgRedraw);
+	int32 drawListPos = fillActorDrawingList(drawList, flagflip);
 	drawListPos = fillExtraDrawingList(drawList, drawListPos);
 
-	_currNumOfRedrawBox = 0;
+	_nbPhysBox = 0;
 	sortDrawingList(drawList, drawListPos);
 	correctZLevels(drawList, drawListPos);
-	processDrawList(drawList, drawListPos, bgRedraw);
+	processDrawList(drawList, drawListPos, flagflip);
 
 	_engine->_debugState->renderDebugView();
 
@@ -921,11 +918,11 @@ void Redraw::drawScene(bool bgRedraw) { // AffScene
 		_engine->_scene->_newCube = SCENE_CEILING_GRID_FADE_1;
 	}
 
-	if (bgRedraw) {
+	if (flagflip) {
 		moveNextAreas();
 		_engine->restoreTimer();
 	} else {
-		flipRedrawAreas();
+		flipBoxes();
 	}
 
 	if (_engine->_screens->_flagFade) {

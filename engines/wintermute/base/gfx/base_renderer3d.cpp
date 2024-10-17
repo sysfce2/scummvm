@@ -87,32 +87,6 @@ bool BaseRenderer3D::getProjectionParams(float *resWidth, float *resHeight, floa
 	return true;
 }
 
-void BaseRenderer3D::project(const Math::Matrix4 &worldMatrix, const Math::Vector3d &point, int32 &x, int32 &y) {
-	Math::Matrix4 tmp = worldMatrix;
-	tmp.transpose();
-	Math::Vector3d windowCoords;
-	Math::Matrix4 modelMatrix = tmp * _lastViewMatrix;
-	int viewport[4] = { _viewportRect.left, _height - _viewportRect.bottom, _viewportRect.width(), _viewportRect.height()};
-	Math::gluMathProject(point, modelMatrix.getData(), _projectionMatrix.getData(), viewport, windowCoords);
-	x = windowCoords.x();
-	// The Wintermute script code will expect a Direct3D viewport
-	y = viewport[3] - windowCoords.y();
-}
-
-Math::Ray BaseRenderer3D::rayIntoScene(int x, int y) {
-	Math::Vector3d direction((((2.0f * x) / _viewportRect.width()) - 1) / _projectionMatrix(0, 0),
-	                        -(((2.0f * y) / _viewportRect.height()) - 1) / _projectionMatrix(1, 1),
-	                        -1.0f);
-
-	Math::Matrix4 m = _lastViewMatrix;
-	m.inverse();
-	m.transpose();
-	m.transform(&direction, false);
-
-	Math::Vector3d origin = m.getPosition();
-	return Math::Ray(origin, direction);
-}
-
 bool BaseRenderer3D::setAmbientLightColor(uint32 color) {
 	_ambientLightColor = color;
 	_ambientLightOverride = true;

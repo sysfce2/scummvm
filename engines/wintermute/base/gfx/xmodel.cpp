@@ -62,7 +62,7 @@ XModel::XModel(BaseGame *inGame, BaseObject *owner) : BaseObject(inGame) {
 	_lastProjMat.setToIdentity();
 	_lastOffsetX = _lastOffsetY = 0;
 
-	_BBoxStart = _BBoxEnd = Math::Vector3d(0.0f, 0.0f, 0.0f);
+	_BBoxStart = _BBoxEnd = DXVector3(0.0f, 0.0f, 0.0f);
 	_boundingRect.setEmpty();
 
 	for (int i = 0; i < X_NUM_ANIMATION_CHANNELS; i++) {
@@ -478,9 +478,9 @@ bool XModel::render() {
 		bool res = _rootFrame->render(this);
 
 		// remember matrices for object picking purposes
-		//_gameRef->_renderer3D->getWorldTransform(_lastWorldMat);
-		//_gameRef->_renderer3D->getWorldTransform(_lastViewMat);
-		//_gameRef->_renderer3D->getWorldTransform(_lastProjMat);
+		_gameRef->_renderer3D->getWorldTransform(_lastWorldMat);
+		_gameRef->_renderer3D->getViewTransform(_lastViewMat);
+		_gameRef->_renderer3D->getProjectionTransform(_lastProjMat);
 
 		// remember scene offset
 		Rect32 rc;
@@ -562,26 +562,45 @@ bool XModel::isTransparentAt(int x, int y) {
 		y += _gameRef->_renderer3D->_drawOffsetY;
 	}
 
-	Math::Ray ray = _gameRef->_renderer3D->rayIntoScene(x, y);
-	Math::Vector3d pickRayDir;
-	Math::Vector3d pickRayOrig;
-	pickRayDir = ray.getDirection();
-	pickRayOrig = ray.getOrigin();
+	DXVector3 pickRayDir;
+	DXVector3 pickRayOrig;
+
+	// Compute the vector of the pick ray in screen space
+	DXVector3 vec;
+	vec._x =  (((2.0f * x) / (_drawingViewport.width())) - 1) / _lastProjMat(0, 0);
+	vec._y = -(((2.0f * y) / (_drawingViewport.height())) - 1) / _lastProjMat(1, 1);
+	vec._z =  -1.0f;
+
+	// Get the inverse view matrix
+	DXMatrix m, viewMatrix = DXMatrix(_lastViewMat.getData());
+	DXMatrixInverse(&m, nullptr, &viewMatrix);
+
+	// Transform the screen space pick ray into 3D space
+	pickRayDir._x  = vec._x * m.matrix._11 + vec._y * m.matrix._21 + vec._z * m.matrix._31;
+	pickRayDir._y  = vec._x * m.matrix._12 + vec._y * m.matrix._22 + vec._z * m.matrix._32;
+	pickRayDir._z  = vec._x * m.matrix._13 + vec._y * m.matrix._23 + vec._z * m.matrix._33;
+	pickRayOrig._x = m.matrix._41;
+	pickRayOrig._y = m.matrix._42;
+	pickRayOrig._z = m.matrix._43;
 
 	// transform to model space
-	Math::Vector3d end = pickRayOrig + pickRayDir;
-	Math::Matrix4 m = _lastWorldMat;
-	m.inverse();
-	m.transform(&pickRayOrig, true);
-	m.transform(&end, true);
+	DXVector3 end = pickRayOrig + pickRayDir;
+	DXMatrix worldMatrix = DXMatrix(_lastWorldMat.getData());
+	DXMatrixInverse(&m, nullptr, &worldMatrix);
+	DXMatrixTranspose(&m, &m);
+	DXVec3TransformCoord(&pickRayOrig, &pickRayOrig, &m);
+	DXVec3TransformCoord(&end, &end, &m);
 	pickRayDir = end - pickRayOrig;
 
-	return !_rootFrame->pickPoly(&pickRayOrig, &pickRayDir);
+	Math::Vector3d vPickRayOrig = Math::Vector3d(pickRayOrig._x, pickRayOrig._y, pickRayOrig._z);
+	Math::Vector3d vPickRayDir = Math::Vector3d(pickRayDir._x, pickRayDir._y, pickRayDir._z);
+
+	return !_rootFrame->pickPoly(&vPickRayOrig, &vPickRayDir);
 }
 
 //////////////////////////////////////////////////////////////////////////
 void XModel::updateBoundingRect() {
-	_BBoxStart = _BBoxEnd = Math::Vector3d(0, 0, 0);
+	_BBoxStart = _BBoxEnd = DXVector3(0, 0, 0);
 
 	if (_rootFrame) {
 		_rootFrame->getBoundingBox(&_BBoxStart, &_BBoxEnd);
@@ -590,47 +609,50 @@ void XModel::updateBoundingRect() {
 	_boundingRect.left = _boundingRect.top = INT_MAX_VALUE;
 	_boundingRect.right = _boundingRect.bottom = INT_MIN_VALUE;
 
-	Math::Matrix4 viewMat, projMat, worldMat;
-	Math::Vector3d vec2d(0, 0, 0);
-	_gameRef->_renderer3D->getViewTransform(viewMat);
-	_gameRef->_renderer3D->getProjectionTransform(projMat);
-	_gameRef->_renderer3D->getWorldTransform(worldMat);
+	Math::Matrix4 view, proj, world;
+	DXVector3 vec2d(0, 0, 0);
+	_gameRef->_renderer3D->getViewTransform(view);
+	_gameRef->_renderer3D->getProjectionTransform(proj);
+	_gameRef->_renderer3D->getWorldTransform(world);
+	world.transpose();
+	DXMatrix viewMat = DXMatrix(view.getData());
+	DXMatrix projMat = DXMatrix(proj.getData());
+	DXMatrix worldMat = DXMatrix(world.getData());
 
 	_drawingViewport = _gameRef->_renderer3D->getViewPort();
 
-	float x1 = _BBoxStart.x();
-	float x2 = _BBoxEnd.x();
-	float y1 = _BBoxStart.y();
-	float y2 = _BBoxEnd.y();
-	float z1 = _BBoxStart.z();
-	float z2 = _BBoxEnd.z();
+	float x1 = _BBoxStart._x;
+	float x2 = _BBoxEnd._x;
+	float y1 = _BBoxStart._y;
+	float y2 = _BBoxEnd._y;
+	float z1 = _BBoxStart._z;
+	float z2 = _BBoxEnd._z;
 
-	int32 screenX = 0;
-	int32 screenY = 0;
+	DXVector3 v111(x1 ,y1, z1);
+	DXVec3Project(&vec2d, &v111, &_drawingViewport, &projMat, &viewMat, &worldMat);
+	updateRect(&_boundingRect, &vec2d);
+	DXVector3 v211(x2, y1, z1);
+	DXVec3Project(&vec2d, &v211, &_drawingViewport, &projMat, &viewMat, &worldMat);
+	updateRect(&_boundingRect, &vec2d);
+	DXVector3 v112(x1, y1, z2);
+	DXVec3Project(&vec2d, &v112, &_drawingViewport, &projMat, &viewMat, &worldMat);
+	updateRect(&_boundingRect, &vec2d);
+	DXVector3 v212(x2, y1, z2);
+	DXVec3Project(&vec2d, &v212, &_drawingViewport, &projMat, &viewMat, &worldMat);
+	updateRect(&_boundingRect, &vec2d);
 
-	_gameRef->_renderer3D->project(_lastWorldMat, Math::Vector3d(x1, y1, z1), screenX, screenY);
-	updateRect(&_boundingRect, Math::Vector3d(screenX, screenY, 0));
-
-	_gameRef->_renderer3D->project(_lastWorldMat, Math::Vector3d(x1, y1, z2), screenX, screenY);
-	updateRect(&_boundingRect, Math::Vector3d(screenX, screenY, 0));
-
-	_gameRef->_renderer3D->project(_lastWorldMat, Math::Vector3d(x1, y2, z1), screenX, screenY);
-	updateRect(&_boundingRect, Math::Vector3d(screenX, screenY, 0));
-
-	_gameRef->_renderer3D->project(_lastWorldMat, Math::Vector3d(x1, y2, z2), screenX, screenY);
-	updateRect(&_boundingRect, Math::Vector3d(screenX, screenY, 0));
-
-	_gameRef->_renderer3D->project(_lastWorldMat, Math::Vector3d(x2, y1, z1), screenX, screenY);
-	updateRect(&_boundingRect, Math::Vector3d(screenX, screenY, 0));
-
-	_gameRef->_renderer3D->project(_lastWorldMat, Math::Vector3d(x2, y1, z2), screenX, screenY);
-	updateRect(&_boundingRect, Math::Vector3d(screenX, screenY, 0));
-
-	_gameRef->_renderer3D->project(_lastWorldMat, Math::Vector3d(x2, y2, z1), screenX, screenY);
-	updateRect(&_boundingRect, Math::Vector3d(screenX, screenY, 0));
-
-	_gameRef->_renderer3D->project(_lastWorldMat, Math::Vector3d(x2, y2, z2), screenX, screenY);
-	updateRect(&_boundingRect, Math::Vector3d(screenX, screenY, 0));
+	DXVector3 v121(x1, y2, z1);
+	DXVec3Project(&vec2d, &v121, &_drawingViewport, &projMat, &viewMat, &worldMat);
+	updateRect(&_boundingRect, &vec2d);
+	DXVector3 v221(x2, y2, z1);
+	DXVec3Project(&vec2d, &v221, &_drawingViewport, &projMat, &viewMat, &worldMat);
+	updateRect(&_boundingRect, &vec2d);
+	DXVector3 v122(x1, y2, z2);
+	DXVec3Project(&vec2d, &v122, &_drawingViewport, &projMat, &viewMat, &worldMat);
+	updateRect(&_boundingRect, &vec2d);
+	DXVector3 v222(x2, y2, z2);
+	DXVec3Project(&vec2d, &v222, &_drawingViewport, &projMat, &viewMat, &worldMat);
+	updateRect(&_boundingRect, &vec2d);
 
 	_boundingRect.left -= _gameRef->_renderer3D->_drawOffsetX;
 	_boundingRect.right -= _gameRef->_renderer3D->_drawOffsetX;
@@ -639,11 +661,11 @@ void XModel::updateBoundingRect() {
 }
 
 //////////////////////////////////////////////////////////////////////////
-void XModel::updateRect(Rect32 *rc, Math::Vector3d vec) {
-	rc->left   = MIN(rc->left, (int32)vec.x());
-	rc->right  = MAX(rc->right, (int32)vec.x());
-	rc->top    = MIN(rc->top, (int32)vec.y());
-	rc->bottom = MAX(rc->bottom, (int32)vec.y());
+void XModel::updateRect(Rect32 *rc, DXVector3 *vec) {
+	rc->left   = MIN(rc->left, (int32)vec->_x);
+	rc->right  = MAX(rc->right, (int32)vec->_x);
+	rc->top    = MIN(rc->top, (int32)vec->_y);
+	rc->bottom = MAX(rc->bottom, (int32)vec->_y);
 }
 
 //////////////////////////////////////////////////////////////////////////

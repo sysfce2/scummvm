@@ -251,7 +251,7 @@ bool Scene::loadSceneLBA2() {
 		setBonusParameterFlags(act, stream.readUint16LE());
 		act->_beta = (int16)stream.readUint16LE();
 		act->_srot = (int16)stream.readUint16LE();
-		act->_controlMode = (ControlMode)stream.readByte(); // move
+		act->_move = (ControlMode)stream.readByte(); // move
 		act->_cropLeft = stream.readSint16LE();
 		act->_delayInMillis = act->_cropLeft; // TODO: this might not be needed
 		act->_cropTop = stream.readSint16LE();
@@ -386,7 +386,7 @@ bool Scene::loadSceneLBA1() {
 		act->_bonusParameter.givenNothing = 0;
 		act->_beta = (int16)stream.readUint16LE();
 		act->_srot = (int16)stream.readUint16LE();
-		act->_controlMode = (ControlMode)stream.readUint16LE();
+		act->_move = (ControlMode)stream.readUint16LE();
 		act->_cropLeft = stream.readSint16LE();
 		act->_delayInMillis = act->_cropLeft; // TODO: this might not be needed
 		act->_cropTop = stream.readSint16LE();
@@ -553,7 +553,7 @@ void Scene::changeCube() {
 					pos.x = zone->infoData.ChangeScene.x - zone->mins.x + track.x;
 					pos.y = zone->infoData.ChangeScene.y - zone->mins.y + track.y;
 					pos.z = zone->infoData.ChangeScene.z - zone->mins.z + track.z;
-					_engine->_scene->_heroPositionType = ScenePositionType::kZone;
+					_engine->_scene->_flagChgCube = ScenePositionType::kZone;
 					debug(2, "Using zone position %i:%i:%i", pos.x, pos.y, pos.z);
 				}
 			}
@@ -589,7 +589,7 @@ void Scene::changeCube() {
 	clearScene();
 	_engine->_actor->loadHeroEntities();
 
-	_sceneHero->_controlMode = ControlMode::kManual;
+	_sceneHero->_move = ControlMode::kManual;
 	_sceneHero->_zoneSce = -1;
 	_sceneHero->_offsetLife = 0;
 	_sceneHero->_offsetTrack = -1;
@@ -605,6 +605,11 @@ void Scene::changeCube() {
 		_engine->_screens->setBlackPal();
 		_engine->_holomap->holoTraj(_numHolomapTraj);
 		_numHolomapTraj = -1;
+		_engine->_screens->_flagFade = true;
+	} else {
+		// TODO lbawin can do a fade here (if activated)
+		// _engine->_screens->_flagFade = true;
+
 	}
 
 	if (_newCube == LBA1SceneId::Citadel_Island_end_sequence_1 || _newCube == LBA1SceneId::Citadel_Island_end_sequence_2) {
@@ -612,16 +617,21 @@ void Scene::changeCube() {
 	}
 
 	_engine->_text->initSceneTextBank();
-	_engine->_grid->initGrid(_newCube);
 
-	if (_heroPositionType == ScenePositionType::kZone) {
-		_newHeroPos = _zoneHeroPos;
-	} else if (_heroPositionType == ScenePositionType::kScene || _heroPositionType == ScenePositionType::kNoPosition) {
-		_newHeroPos = _sceneHeroPos;
+	if (_cubeJingle != 255) {
+		// _engine->_music->fadeMusicMidi(1);
 	}
 
-	_sceneHero->_posObj = _newHeroPos;
-	_startYFalling = _newHeroPos.y;
+	_engine->_grid->initGrid(_newCube);
+
+	if (_flagChgCube == ScenePositionType::kZone) {
+		_sceneStart = _zoneHeroPos;
+	} else if (_flagChgCube == ScenePositionType::kScene || _flagChgCube == ScenePositionType::kNoPosition) {
+		_sceneStart = _sceneHeroPos;
+	}
+
+	_sceneHero->_posObj = _sceneStart;
+	_startYFalling = _sceneStart.y;
 
 	_engine->_renderer->setLightVector(_alphaLight, _betaLight, LBAAngles::ANGLE_0);
 
@@ -631,35 +641,40 @@ void Scene::changeCube() {
 		_engine->autoSave();
 	}
 
-	_engine->_actor->restartHeroScene();
+	_engine->_actor->restartPerso();
 
+	// StartInitAllObjs
 	for (int32 a = 1; a < _nbObjets; a++) {
 		_engine->_actor->startInitObj(a);
 	}
 
-	_engine->_gameState->_inventoryNumKeys = 0;
+	_engine->_gameState->_nbLittleKeys = 0;
+	_engine->_gameState->_magicBall = -1;
+	_engine->_movements->_lastJoyFlag = true;
+	_engine->_grid->_zoneGrm = -1;
+	_engine->_grid->_indexGrm = -1;
+	_engine->_redraw->_firstTime = true;
 	_engine->_cameraZone = false;
+	_newCube = SCENE_CEILING_GRID_FADE_1;
+	_flagChgCube = ScenePositionType::kNoPosition;
+	_flagRenderGrid = true;
+
+	_samplePlayed = 2 * 4 * 8;
+	_timerNextAmbiance = 0;
 
 	ActorStruct *followedActor = getActor(_numObjFollow);
 	_engine->_grid->centerOnActor(followedActor);
 
-	_engine->_gameState->_magicBall = -1;
-	_engine->_movements->_lastJoyFlag = true;
-	_engine->_grid->_useCellingGrid = -1;
-	_engine->_grid->_cellingGridIdx = -1;
 	_engine->_screens->_flagFade = true;
 	_engine->_renderer->setLightVector(_alphaLight, _betaLight, LBAAngles::ANGLE_0);
 
-	_newCube = SCENE_CEILING_GRID_FADE_1;
-	_enableGridTileRendering = true;
-	_heroPositionType = ScenePositionType::kNoPosition;
 	_zoneHeroPos = IVec3();
-	_sampleAmbienceTime = 0;
 
 	debug(2, "Scene %i music track id: %i", _numCube, _cubeJingle);
 	if (_cubeJingle != 255) {
 		_engine->_music->playMusic(_cubeJingle);
 	}
+
 	_engine->_gameState->handleLateGameItems();
 }
 
@@ -706,7 +721,7 @@ void Scene::playSceneMusic() {
 }
 
 void Scene::processEnvironmentSound() {
-	if (_engine->timerRef < _sampleAmbienceTime) {
+	if (_engine->timerRef < _timerNextAmbiance) {
 		return;
 	}
 	int16 currentAmb = _engine->getRandomNumber(4); // random ambiance
@@ -734,7 +749,7 @@ void Scene::processEnvironmentSound() {
 	}
 
 	// compute next ambiance timer
-	_sampleAmbienceTime = _engine->timerRef + _engine->toSeconds(_engine->getRandomNumber(_sampleMinDelayRnd) + _sampleMinDelay);
+	_timerNextAmbiance = _engine->timerRef + _engine->toSeconds(_engine->getRandomNumber(_sampleMinDelayRnd) + _sampleMinDelay);
 }
 
 void Scene::processZoneExtraBonus(ZoneStruct *zone) {
@@ -767,7 +782,7 @@ void Scene::checkZoneSce(int32 actorIdx) {
 	int32 currentZ = actor->_posObj.z;
 
 	actor->_zoneSce = -1;
-	bool tmpCellingGrid = false;
+	bool flaggrm = false;
 
 	if (IS_HERO(actorIdx)) {
 		_flagClimbing = false;
@@ -789,7 +804,7 @@ void Scene::checkZoneSce(int32 actorIdx) {
 					_zoneHeroPos.x = actor->_posObj.x - zone->mins.x + zone->infoData.ChangeScene.x;
 					_zoneHeroPos.y = actor->_posObj.y - zone->mins.y + zone->infoData.ChangeScene.y;
 					_zoneHeroPos.z = actor->_posObj.z - zone->mins.z + zone->infoData.ChangeScene.z;
-					_heroPositionType = ScenePositionType::kZone;
+					_flagChgCube = ScenePositionType::kZone;
 				}
 				break;
 			case ZoneType::kCamera:
@@ -808,16 +823,16 @@ void Scene::checkZoneSce(int32 actorIdx) {
 				break;
 			case ZoneType::kGrid:
 				if (_numObjFollow == actorIdx) {
-					tmpCellingGrid = true;
-					if (_engine->_grid->_useCellingGrid != zone->num) {
-						if (zone->num != -1) {
+					flaggrm = true;
+					if (_engine->_grid->_zoneGrm != zone->num) {
+						if (_engine->_grid->_zoneGrm != -1) {
 							_engine->_grid->copyMapToCube();
 						}
 
-						_engine->_grid->_useCellingGrid = zone->num;
-						_engine->_grid->_cellingGridIdx = z;
+						_engine->_grid->_zoneGrm = zone->num;
+						_engine->_grid->_indexGrm = z;
 						_engine->saveTimer(false);
-						_engine->_grid->initCellingGrid(_engine->_grid->_useCellingGrid);
+						_engine->_grid->initCellingGrid(_engine->_grid->_zoneGrm);
 						_engine->restoreTimer();
 					}
 				}
@@ -861,9 +876,9 @@ void Scene::checkZoneSce(int32 actorIdx) {
 		}
 	}
 
-	if (!tmpCellingGrid && actorIdx == _numObjFollow && _engine->_grid->_useCellingGrid != -1) {
-		_engine->_grid->_useCellingGrid = -1;
-		_engine->_grid->_cellingGridIdx = -1;
+	if (!flaggrm && actorIdx == _numObjFollow && _engine->_grid->_zoneGrm != -1) {
+		_engine->_grid->_zoneGrm = -1;
+		_engine->_grid->_indexGrm = -1;
 		_engine->_grid->copyMapToCube();
 		_engine->_redraw->_firstTime = true;
 	}

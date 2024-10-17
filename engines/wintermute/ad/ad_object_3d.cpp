@@ -127,8 +127,23 @@ bool AdObject3D::update() {
 
 //////////////////////////////////////////////////////////////////////////
 bool AdObject3D::convert3DTo2D(Math::Matrix4 *worldMat, int32 *posX, int32 *posY) {
-	Math::Vector3d origin(0.0f, 0.0f, 0.0f);
-	_gameRef->_renderer3D->project(*worldMat, origin, *posX, *posY);
+	DXMatrix viewMat, projMat, world;
+	DXVector3 vec2d(0.0f, 0.0f, 0.0f);
+	DXVector3 origin(0.0f, 0.0f, 0.0f);
+	Math::Matrix4 view, proj;
+	_gameRef->_renderer3D->getViewTransform(view);
+	_gameRef->_renderer3D->getProjectionTransform(proj);
+	viewMat = DXMatrix(view.getData());
+	projMat = DXMatrix(proj.getData());
+	world = DXMatrix(worldMat->getData());
+	DXMatrixTranspose(&world, &world);
+
+	Rect32 viewport = _gameRef->_renderer3D->getViewPort();
+
+	DXVec3Project(&vec2d, &origin, &viewport, &projMat, &viewMat, &world);
+
+	*posX = vec2d._x + _gameRef->_offsetX - _gameRef->_renderer3D->_drawOffsetX;
+	*posY = vec2d._y + _gameRef->_offsetY - _gameRef->_renderer3D->_drawOffsetY;
 
 	return true;
 }
@@ -604,15 +619,16 @@ bool AdObject3D::getBonePosition2D(const char *boneName, int32 *x, int32 *y) {
 		return false;
 	}
 
-	Math::Matrix4 boneMatrix;
-	boneMatrix.setData(*boneMat);
-	Math::Matrix4 bonePosMat = boneMatrix * _worldMatrix;
+	DXMatrix bonePosMat, worldMatrix = DXMatrix(_worldMatrix.getData());
+	DXMatrixMultiply(&bonePosMat, boneMat, &worldMatrix);
 
-	Math::Vector4d vectBone4 = Math::Vector4d(0.0f, 0.0f, 0.0f, 0.0f);
-	bonePosMat.transformVector(&vectBone4);
-	Math::Vector3d vectBone(vectBone4.x(), vectBone4.y(), vectBone4.z());
+	DXVector4 vectBone4;
+	DXVector3 vectBone3(0, 0, 0);
+	DXVec3Transform(&vectBone4, &vectBone3, &bonePosMat);
+	DXVector3 vectBone(vectBone4._x, vectBone4._y, vectBone4._z);
 
-	adGame->_scene->_sceneGeometry->convert3Dto2D(&vectBone, x, y);
+	Math::Vector3d vectBonePos = Math::Vector3d(vectBone4._x, vectBone4._y, vectBone4._z);
+	adGame->_scene->_sceneGeometry->convert3Dto2D(&vectBonePos, x, y);
 	return true;
 }
 
@@ -627,16 +643,16 @@ bool AdObject3D::getBonePosition3D(const char *boneName, Math::Vector3d *pos, Ma
 		return false;
 	}
 
-	Math::Matrix4 boneMatrix;
-	boneMatrix.setData(*boneMat);
-	Math::Matrix4 bonePosMat = boneMatrix * _worldMatrix;
-	*pos = Math::Vector3d(0.0f, 0.0f, 0.0f);
+	DXMatrix bonePosMat, worldMatrix = DXMatrix(_worldMatrix.getData());
+	DXMatrixMultiply(&bonePosMat, boneMat, &worldMatrix);
 
-	if (offset) {
-		*pos = *offset;
-	}
+	DXVector4 vectBone4;
+	DXVector3 vectBone3(offset->x(), offset->x(), offset->y());
+	DXVec3Transform(&vectBone4, &vectBone3, &bonePosMat);
 
-	bonePosMat.transform(pos, true);
+	pos->x() = vectBone4._x;
+	pos->y() = vectBone4._y;
+	pos->z() = vectBone4._z;
 
 	return true;
 }
