@@ -316,8 +316,8 @@ static void _dissolveToScreen(const Graphics::ManagedSurface &src, const Common:
 
 static void _doScroll(Graphics::ManagedSurface &compBuf, int16 dir, int16 steps, int16 offset) {
 	// Scroll the contents of the composition buffer on to the screen
-	// Dir 0/1 means y (scroll toward bottom / top)
-	// Dir 2 means x (scroll toward right)
+	// Dir 0/1 means y (scroll camera toward bottom / top)
+	// Dir 2/3 means x (scroll camera toward right / left)
 	//
 	// This is not at all how the original does it, but we have a bit
 	// more memory and cpu to play with so an extra 64k screen buffer
@@ -929,11 +929,12 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
 			flipMode = kImageFlipHV;
 
 		Common::SharedPtr<Image> img = env._scriptShapes[bmpNo];
-		if (img)
+		if (img) {
 			img->drawBitmap(frameno, env._xOff + ivals[0], env._yOff + ivals[1],
 					seq._drawWin, _vm->_compositionBuffer, flipMode, dstWidth, dstHeight);
-		else
+		} else {
 			warning("Trying to draw image %d in env %d which is not loaded", bmpNo, env._enviro);
+		}
 		break;
 	}
 	case 0xa600: { // DRAW GETPUT: i:int
@@ -1086,15 +1087,16 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
 	case 0xf060: // LOAD SONG:	filename:str
 		if (seq._executed) // this is a one-shot op
 			break;
+
 		if (_vm->_platform == Common::kPlatformAmiga) {
 			// TODO: remove hard-coded stuff..
 			_vm->_soundPlayer->playAmigaSfx("DYNAMIX.INS", 0, 255);
 		} else if (_vm->_platform == Common::kPlatformMacintosh) {
-			_vm->_soundPlayer->loadMacMusic(sval.c_str());
-			_vm->_soundPlayer->playMusic(seq._currentSongId);
+			if (_vm->_soundPlayer->loadMacMusic(sval.c_str()))
+				_vm->_soundPlayer->playMusic(seq._currentSongId);
 		} else {
-			_vm->_soundPlayer->loadMusic(sval.c_str());
-			_vm->_soundPlayer->playMusic(seq._currentSongId);
+			if (_vm->_soundPlayer->loadMusic(sval.c_str()))
+				_vm->_soundPlayer->playMusic(seq._currentSongId);
 		}
 		break;
 	case 0xf080: { // LOAD SCROLL: filename:str

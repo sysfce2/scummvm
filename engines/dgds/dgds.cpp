@@ -105,6 +105,9 @@ DgdsEngine::DgdsEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	} else if (!strcmp(gameDesc->gameId, "comingattractions")) {
 		_isDemo = true;
 		_gameId = GID_COMINGATTRACTIONS;
+	} else if (!strcmp(gameDesc->gameId, "castaway")) {
+		_isDemo = true;
+		_gameId = GID_CASTAWAY;
 	} else {
 		error("Unknown game ID");
 	}
@@ -155,6 +158,8 @@ void DgdsEngine::loadIcons() {
 bool DgdsEngine::changeScene(int sceneNum) {
 	assert(_scene && _adsInterp);
 
+	debug("CHANGE SCENE %d -> %d (clock %s)", _scene->getNum(), sceneNum, _clock.dump().c_str());
+
 	if (sceneNum == _scene->getNum()) {
 		warning("Tried to change from scene %d to itself, doing nothing.", sceneNum);
 		return false;
@@ -193,7 +198,6 @@ bool DgdsEngine::changeScene(int sceneNum) {
 
 	_scene->unload();
 	_backgroundFile.clear();
-	_soundPlayer->unloadMusic();
 	_soundPlayer->stopAllSfx();
 
 	_gdsScene->runChangeSceneOps();
@@ -221,8 +225,8 @@ bool DgdsEngine::changeScene(int sceneNum) {
 	else
 		_adsInterp->unload();
 
-	_scene->runEnterSceneOps();
 	debug("%s", _scene->dump("").c_str());
+	_scene->runEnterSceneOps();
 
 	_justChangedScene1 = true;
 	_justChangedScene2 = true;
@@ -363,6 +367,7 @@ void DgdsEngine::loadGameFiles() {
 		reqParser.parse(&vcrRequestData, "DVCR.REQ");
 		break;
 	case GID_HOC:
+		_soundPlayer->loadSFX("SOUNDS1.SNG");
 		_gameGlobals = new HocGlobals(_clock);
 		_gamePals->loadPalette("HOC.PAL");
 		_gdsScene->load("HOC.GDS", _resource, _decompressor);
@@ -415,6 +420,12 @@ void DgdsEngine::loadGameFiles() {
 		_gameGlobals = new Globals(_clock);
 		_gamePals->loadPalette("DYNAMIX.PAL");
 		_adsInterp->load("DEMO.ADS");
+		_adsInterp->segmentOrState(1, 3);
+		break;
+	case GID_CASTAWAY:
+		_gameGlobals = new Globals(_clock);
+		_gamePals->loadPalette("JOHNCAST.PAL");
+		_adsInterp->load("JOHNNY.ADS");
 		_adsInterp->segmentOrState(1, 3);
 		break;
 	default:
@@ -744,7 +755,6 @@ Common::Error DgdsEngine::syncGame(Common::Serializer &s) {
 		if (!_resource->hasResource(sceneFile))
 			error("Game references non-existent scene %d", sceneNum);
 
-		_soundPlayer->unloadMusic();
 		_soundPlayer->stopAllSfx();
 		_scene->unload();
 		_adsInterp->unload();
@@ -793,7 +803,6 @@ Common::Error DgdsEngine::syncGame(Common::Serializer &s) {
 		_storedAreaBuffer.fillRect(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT), 0);
 	}
 
-	debug("%s", _scene->dump("").c_str());
 	_scene->runEnterSceneOps();
 
 	return Common::kNoError;

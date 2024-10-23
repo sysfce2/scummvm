@@ -20,6 +20,7 @@
  */
 
 #include "common/debug.h"
+#include "common/memstream.h"
 
 #include "qdengine/qdengine.h"
 #include "qdengine/minigames/adv/m_triangles.h"
@@ -73,6 +74,8 @@ MinigameTriangle::MinigameTriangle() {
 		gameType_ = TRIANGLE;
 	}
 
+	fieldLines_ = fieldWidth_ = 0;
+
 	if (!getParameter("size", fieldLines_, true))
 		return;
 	if (fieldLines_ < 2)
@@ -120,19 +123,16 @@ MinigameTriangle::MinigameTriangle() {
 		}
 	}
 
-	warning("STUB: MinigameTriangle::MinigameTriangle(): processGameData");
-#if 0
-	XBuffer gameData;
+	Common::MemoryReadWriteStream gameData(DisposeAfterUse::YES);
 
 	for (auto &it : positions_)
-		gameData.write(it);
+		it.write(gameData);
 
 	if (!g_runtime->processGameData(gameData))
 		return;
 
 	for (auto &it : positions_)
-		gameData.read(it);
-#endif
+		it.read(gameData);
 
 	for (int num = 1; num <= 2; ++num) {
 		for (int angle = 1; angle <= 3; ++angle) {

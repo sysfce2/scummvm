@@ -215,10 +215,10 @@ public:
 				}
 			}
 
-			if (mouseObj && clickObj) {
+			if (clickObj) { // && mouseObj
 				name = clickObj->name();
 
-				if (strstr(name, "notesto")) {
+				if (strstr(name, "notesto") && num > 0 && num <= 8) {
 					_figures[num - 1]->set_state("base");
 					_figures[num + 15]->set_state("del");
 
@@ -334,9 +334,9 @@ private:
 	const qdEngineInterface *_engine = nullptr;
 	qdMinigameSceneInterface *_scene = nullptr;
 
-	qdMinigameObjectInterface *_figures[24];
+	qdMinigameObjectInterface *_figures[24] = { nullptr };
 
-	int _numVerts[8];
+	int _numVerts[8] = { 0 };
 
 	qdMinigameObjectInterface *_objNoDough = nullptr;
 	qdMinigameObjectInterface *_objNoDoughFake = nullptr;

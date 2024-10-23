@@ -21,6 +21,7 @@
 
 #include "common/debug.h"
 #include "common/memstream.h"
+#include "common/savefile.h"
 
 #include "qdengine/qdengine.h"
 #include "qdengine/minigames/adv/common.h"
@@ -68,7 +69,7 @@ private:
 
 MinigameManager::MinigameManager(MinigameConsCallback callback)
 	: currentGameIndex_(-1, -1) {
-	state_container_name_ = "Saves/minigames.dat";
+	state_container_name_ = Common::String::format("%s.min", g_engine->getTargetName().c_str());
 
 	engine_ = 0;
 	scene_ = 0;
@@ -145,10 +146,6 @@ bool MinigameManager::init(const qdEngineInterface *engine_interface) {
 bool MinigameManager::createGame() {
 	assert(engine_ && scene_);
 	assert(!game_);
-
-	warning("STUB: MinigameManager::createGame()");
-
-#if 0
 
 	screenSize_ = engine_->screen_size();
 
@@ -244,12 +241,11 @@ bool MinigameManager::createGame() {
 		return true;
 	}
 
-#endif
 	return false;
 }
 
 #define SAFE_RELEASE(name)                      \
-    if(name){                                   \
+    if (name) {                                 \
         scene_->release_object_interface(name); \
         name = 0;                               \
     }
@@ -274,14 +270,17 @@ bool MinigameManager::finit() {
 	delete timeManager_;
 	timeManager_ = 0;
 
-	SAFE_RELEASE(state_flag_)
-	SAFE_RELEASE(pause_flag_)
+	if (scene_) {
+		SAFE_RELEASE(state_flag_)
+		SAFE_RELEASE(pause_flag_)
 
-	release(complete_help_miniature_);
-	release(complete_help_);
+		release(complete_help_miniature_);
+		release(complete_help_);
 
-	release(game_help_);
-	release(game_help_trigger_);
+		release(game_help_);
+		release(game_help_trigger_);
+	}
+
 	game_help_enabled_ = true;
 
 	complete_help_state_name_.clear();
@@ -414,8 +413,6 @@ int MinigameManager::load_game(const qdEngineInterface *engine, const qdMinigame
 }
 
 bool MinigameManager::loadState(bool current) {
-	warning("STUB: MinigameManager::loadState()");
-#if 0
 	if (game_) {
 		debugC(2, kDebugMinigames, "MinigameManager::loadState(): load state skiped");
 		return false;
@@ -436,63 +433,67 @@ bool MinigameManager::loadState(bool current) {
 		if (current)
 			debugC(2, kDebugMinigames, "MinigameManager::loadState(): current game: (%d,%d)", currentGameIndex_.gameLevel_, currentGameIndex_.gameNum_);
 
-		XStream file(false);
-		if (file.open(state_container_name_, XS_IN)) {
-			int version;
-			file > version;
+		Common::InSaveFile *file = g_engine->getSaveFileManager()->openForLoading(state_container_name_);
+		if (file) {
+			int version = file->readUint32LE();
+
 			if (version != GameInfo::version()) {
-				warning("MinigameManager::loadState(): Minigame savestate version mismatch. Remove '%s'", state_container_name_);
+				warning("MinigameManager::loadState(): Minigame savestate version mismatch. Remove '%s'", state_container_name_.c_str());
+
+				delete file;
 				return false;
 			}
-			file > seed_;
+			seed_ = file->readUint32LE();
+
 			GameInfoIndex index(0, 0);
-			while (!file.eof()) {
-				file.read(index);
-				assert(gameInfos_.find(index) == gameInfos_.end());
-				if (file.eof())
-					return false;
-				{
-					GameInfo data;
-					file > data;
-					debugC(2, kDebugMinigames, "MinigameManager::loadState(): read game info: (%d,%d), index: %d, game data:%d", index.gameLevel_, index.gameNum_, data.game_.sequenceIndex_, data.empty_ ? 0 : 1);
-					if (data.game_.sequenceIndex_ >= 0)
-						completeCounters_[index.gameLevel_]++;
-					gameInfos_[index] = data;
-				}
+
+			while (!file->eos()) {
+				index.read(*file);
+
+				GameInfo data;
+				data.read(*file);
+
+				debugC(2, kDebugMinigames, "MinigameManager::loadState(): read game info: (%d,%d), index: %d, game data:%d", index.gameLevel_, index.gameNum_, data.game_.sequenceIndex_, data.empty_ ? 0 : 1);
+
+				if (data.game_.sequenceIndex_ >= 0)
+					completeCounters_[index.gameLevel_]++;
+
+				gameInfos_[index] = data;
 			}
+
+			delete file;
 		}
 
 		currentGameInfo_ = current ? &gameInfos_[currentGameIndex_] : 0;
 	}
-#endif
+
 	return true;
 }
 
-extern bool createDirForFile(const char *partialPath);
 void MinigameManager::saveState(bool force) {
 	debugC(2, kDebugMinigames, "MinigameManager::save_state(): save state");
 
-	warning("STUB: MinigameManager::saveState()");
-
-#if 0
 	if (force || currentGameIndex_.gameNum_ >= 0) {
-		XStream file(false);
-		if (createDirForFile(state_container_name_) && file.open(state_container_name_, XS_OUT)) {
-			file < GameInfo::version();
-			file < (engine_ ? engine_->rnd(999999) : seed_);
+		Common::OutSaveFile *file = g_engine->getSaveFileManager()->openForSaving(state_container_name_);
+
+		if (file) {
+			file->writeUint32LE(GameInfo::version());
+			file->writeUint32LE(engine_ ? engine_->rnd(999999) : seed_);
 
 			for (auto &it : gameInfos_) {
 				if (!it._value.empty()) {
 					debugC(2, kDebugMinigames, "MinigameManager::save_state(): write game info: (%d,%d), index: %d, game data: %d", it._key.gameLevel_, it._key.gameNum_, it._value.game_.sequenceIndex_, it._value.empty_ ? 0 : 1);
-					file.write(it._key);
-					file < it._value;
+					it._key.write(*file);
+					it._value.write(*file);
 				}
 			}
+
+			file->finalize();
+			delete file;
 		} else {
-			warning("MinigameManager::saveState(): Failed to save file '%s'", state_container_name_);
+			warning("MinigameManager::saveState(): Failed to save file '%s'", state_container_name_.c_str());
 		}
 	}
-#endif
 }
 
 bool MinigameManager::quant(float dt) {
@@ -546,6 +547,7 @@ bool MinigameManager::quant(float dt) {
 		case MinigameInterface::GAME_LOST:
 			if (!timeManager_->timeIsOut())
 				signal(EVENT_GAME_LOSE);
+			// fallthrough
 		case MinigameInterface::NOT_INITED:
 			gameLose();
 			break;
@@ -792,11 +794,11 @@ float MinigameManager::getDepth(const mgVect3f& pos) const {
 }
 
 QDObject MinigameManager::getObject(const char *name) const {
-	if (!name || !*name)
+	if (!name || !*name) {
 		warning("MinigameManager::getObject(): null name");
-
-	if (!name || !*name)
 		return QDObject::ZERO;
+	}
+
 	qdMinigameObjectInterface *obj = scene_->object_interface(name);
 	if (!obj)
 		warning("MinigameManager::getObject(): Object '%s' not found", transCyrillic(name));
@@ -889,29 +891,28 @@ int MinigameManager::rnd(const Std::vector<float> &prob) const {
 
 // если данные еще ни разу не сохранялись - запоминаем
 // если уже есть запомненные, то заменяем на них
-bool MinigameManager::processGameData(Common::MemoryWriteStream &data) {
-	warning("STUB: MinigameManager::processGameData()");
-#if 0
+bool MinigameManager::processGameData(Common::SeekableReadStream &data) {
+	data.seek(0);
+
 	if (currentGameInfo_) {
 		if (currentGameInfo_->empty_) {
 			currentGameInfo_->empty_ = false;
-			assert(data.tell());
-			currentGameInfo_->write(data.buffer(), data.tell());
+			assert(data.pos());
+			currentGameInfo_->persist(data);
 		} else {
-			if (data.tell() != currentGameInfo_->dataSize_)
-				warning("MinigameManager::processGameData(): Old minigame save detected. Remove '%s'", state_container_name_);
+			if (data.pos() != currentGameInfo_->dataSize_)
+				warning("MinigameManager::processGameData(): Old minigame save detected. Remove '%s'", state_container_name_.c_str());
 
-			if (data.tell() == currentGameInfo_->dataSize_) {
-				data.set(0);
-				data.write(currentGameInfo_->gameData_, currentGameInfo_->dataSize_, true);
+			if (data.pos() == currentGameInfo_->dataSize_) {
+				currentGameInfo_->persist(data);
 			} else {
-				data.set(0);
+				data.seek(0);
 				return false;
 			}
 		}
 	}
-	data.set(0);
-#endif
+	data.seek(0);
+
 	return true;
 }
 
@@ -923,7 +924,7 @@ MinigameData::MinigameData() {
 	bestScore_ = 0;
 }
 
-void MinigameData::write(Common::SeekableWriteStream &out) {
+void MinigameData::write(Common::WriteStream &out) const {
 	out.writeSint32LE(sequenceIndex_);
 	out.writeSint32LE(lastScore_);
 	out.writeSint32LE(lastTime_);
@@ -931,7 +932,7 @@ void MinigameData::write(Common::SeekableWriteStream &out) {
 	out.writeSint32LE(bestScore_);
 }
 
-void MinigameData::read(Common::SeekableReadStream &out) {
+void MinigameData::read(Common::ReadStream &out) {
 	sequenceIndex_ = out.readSint32LE();
 	lastScore_ =     out.readSint32LE();
 	lastTime_ =      out.readSint32LE();
@@ -955,47 +956,60 @@ void GameInfo::free() {
 	dataSize_ = 0;
 }
 
-void GameInfo::write(void *data, uint size) {
-	if (dataSize_ != size) {
+void GameInfo::persist(Common::SeekableReadStream &in) {
+	if (dataSize_ != in.size()) {
 		free();
-		if (size > 0) {
-			gameData_ = malloc(size);
-			dataSize_ = size;
+		if (in.size() > 0) {
+			dataSize_ = in.size();
+			gameData_ = malloc(dataSize_);
 		}
 	}
 	if (dataSize_ > 0)
-		memcpy(gameData_, data, dataSize_);
+		in.read(gameData_, dataSize_);
 }
 
-#if 0
-XStream &operator< (XStream& out, const GameInfo& info) {
-	out.write(info.game_);
-	out.write(info.empty_);
-	if (!info.empty_) {
-		out.write(info.timeManagerData_);
-		out.write(info.effectManagerData_);
-		out < info.dataSize_;
-		if (info.dataSize_ > 0)
-			out.write(info.gameData_, info.dataSize_);
+void GameInfo::write(Common::WriteStream &out) const {
+	game_.write(out);
+	out.writeByte(empty_);
+
+	if (!empty_) {
+		timeManagerData_.crd.write(out);
+		effectManagerData_.crd.write(out);
+
+		out.writeUint32LE(dataSize_);
+		if (dataSize_ > 0)
+			out.write(gameData_, dataSize_);
 	}
-	return out;
 }
 
-XStream &operator> (XStream& in, GameInfo& info) {
-	in.read(info.game_);
-	in.read(info.empty_);
-	if (!info.empty_) {
-		in.read(info.timeManagerData_);
-		in.read(info.effectManagerData_);
-		uint size;
-		in > size;
-		XBuffer buf(size);
-		in.read(buf.buffer(), size);
-		info.write(buf.buffer(), size);
+void GameInfo::read(Common::ReadStream &in) {
+	game_.read(in);
+	empty_ = in.readByte();
+
+	if (!empty_) {
+		timeManagerData_.crd.read(in);
+		effectManagerData_.crd.read(in);
+
+		free();
+
+		dataSize_ = in.readUint32LE();
+
+		if (dataSize_) {
+			gameData_ = malloc(dataSize_);
+			in.read(gameData_, dataSize_);
+		}
 	}
-	return in;
 }
-#endif
+
+void MinigameManager::GameInfoIndex::write(Common::WriteStream &out) const {
+	out.writeUint32LE(gameNum_);
+	out.writeUint32LE(gameLevel_);
+}
+
+void MinigameManager::GameInfoIndex::read(Common::ReadStream &in) {
+	gameNum_ = in.readUint32LE();
+	gameLevel_ = in.readUint32LE();
+}
 
 //========================================================================================================================
 
@@ -1017,6 +1031,8 @@ TimeManager::TimeManager(HoldData<TimeManagerData> &data_) {
 			sscanf(data, "%f", &timeCost_);
 	}
 
+	direction_ = DOWN; // Default value
+
 	if (timeBar_) {
 		TimeManagerData myData;
 		myData.crd = g_runtime->world2game(timeBar_);
@@ -1031,17 +1047,14 @@ TimeManager::TimeManager(HoldData<TimeManagerData> &data_) {
 			if (sscanf(data, "%d", &dir) == 1) {
 				assert(dir >= 0 && dir <= 3);
 				direction_ = Direction(dir);
-			} else
-				direction_ = DOWN;
-		} else
-			direction_ = DOWN;
+			}
+		}
 	} else
 		size_ = mgVect2f(-1.f, -1.f);
 
 	assert(g_runtime->getTime() == 0.f);
 
 	lastEventTime_ = 0;
-
 }
 
 TimeManager::~TimeManager() {

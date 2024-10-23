@@ -58,6 +58,7 @@ struct SpriteVertexShader {
 };
 
 BaseRenderOpenGL3DShader::BaseRenderOpenGL3DShader(BaseGame *inGame) : BaseRenderer3D(inGame) {
+	_flatShadowMaskShader = nullptr;
 }
 
 BaseRenderOpenGL3DShader::~BaseRenderOpenGL3DShader() {
@@ -259,6 +260,7 @@ bool BaseRenderOpenGL3DShader::disableShadows() {
 }
 
 void BaseRenderOpenGL3DShader::displayShadow(BaseObject *object, const DXVector3 *lightPos, bool lightPosRelative) {
+	return; // shadows are broken for a while since it use not allowed binding to frame buffer
 	if (_flatShadowMaskShader) {
 		if (object->_shadowType <= SHADOW_SIMPLE) {
 			// TODO: Display simple shadow here
@@ -628,8 +630,9 @@ bool BaseRenderOpenGL3DShader::initRenderer(int width, int height, bool windowed
 	_flatShadowXModelShader = OpenGL::Shader::fromFiles("wme_flat_shadow_modelx", flatShadowXModelAttributes);
 
 	_active = true;
-	// setup a proper state
-	setup2D(true);
+
+	setProjection();
+
 	return true;
 }
 
@@ -876,7 +879,13 @@ void BaseRenderOpenGL3DShader::renderSceneGeometry(const BaseArray<AdWalkplane *
 
 void BaseRenderOpenGL3DShader::renderShadowGeometry(const BaseArray<AdWalkplane *> &planes, const BaseArray<AdBlock *> &blocks,
                                                     const BaseArray<AdGeneric *> &generics, Camera3D *camera) {
-	setup3D(camera, true);
+	DXMatrix matIdentity;
+	DXMatrixIdentity(&matIdentity);
+
+	if (camera)
+		_gameRef->_renderer3D->setup3D(camera, true);
+
+	setWorldTransform(matIdentity);
 
 	// disable color write
 	glBlendFunc(GL_ZERO, GL_ONE);

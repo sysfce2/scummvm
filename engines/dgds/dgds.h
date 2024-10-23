@@ -69,7 +69,8 @@ enum DgdsGameId {
 	GID_WILLY,
 	GID_SQ5DEMO,
 	GID_COMINGATTRACTIONS,
-	GID_QUARKY
+	GID_QUARKY,
+	GID_CASTAWAY
 };
 
 enum DgdsDetailLevel {
@@ -176,7 +177,8 @@ public:
 
 	void restartGame();
 
-	DgdsGameId getGameId() { return _gameId; }
+	DgdsGameId getGameId() const { return _gameId; }
+	Common::Platform getPlatform() const { return _platform; }
 
 	Graphics::ManagedSurface &getBackgroundBuffer() { return _backgroundBuffer; }
 	Graphics::ManagedSurface &getStoredAreaBuffer() { return _storedAreaBuffer; }

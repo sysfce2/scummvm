@@ -1039,8 +1039,6 @@ bool qdGameObjectMoving::update_screen_pos() {
 				qdGameObjectStateWalk::OffsetType offs_type = qdGameObjectStateWalk::OFFSET_WALK;
 				switch (_movement_mode) {
 				case MOVEMENT_MODE_STOP:
-					offs_type = qdGameObjectStateWalk::OFFSET_STATIC;
-					break;
 				case MOVEMENT_MODE_TURN:
 					offs_type = qdGameObjectStateWalk::OFFSET_STATIC;
 					break;
@@ -1050,7 +1048,7 @@ bool qdGameObjectMoving::update_screen_pos() {
 				case MOVEMENT_MODE_MOVE:
 					offs_type = qdGameObjectStateWalk::OFFSET_WALK;
 					break;
-			case MOVEMENT_MODE_END:
+				case MOVEMENT_MODE_END:
 					offs_type = qdGameObjectStateWalk::OFFSET_END;
 					break;
 				}
@@ -1800,7 +1798,8 @@ bool qdGameObjectMoving::load_data(Common::SeekableReadStream &fh, int save_vers
 	_circuit_objs.clear();
 	for (int i = 0; i < num; i++) {
 		qdNamedObjectReference circ_ref;
-		circ_ref.load_data(fh, save_version);
+		if (!circ_ref.load_data(fh, save_version))
+			return false;
 		_circuit_objs.push_back(dynamic_cast<qdGameObjectMoving *>(
 		                            qdGameDispatcher::get_dispatcher()->get_named_object(&circ_ref)));
 	}

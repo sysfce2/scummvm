@@ -39,6 +39,7 @@
 #include "engines/wintermute/ad/ad_response_box.h"
 #include "engines/wintermute/ad/ad_response_context.h"
 #include "engines/wintermute/ad/ad_scene.h"
+#include "engines/wintermute/ad/ad_scene_geometry.h"
 #include "engines/wintermute/ad/ad_scene_state.h"
 #include "engines/wintermute/ad/ad_sentence.h"
 #include "engines/wintermute/base/base_engine.h"
@@ -2339,6 +2340,15 @@ char *AdGame::findSpeechFile(char *stringID) {
 	return nullptr;
 }
 
+//////////////////////////////////////////////////////////////////////////
+bool AdGame::renderShadowGeometry() {
+#ifdef ENABLE_WME3D
+	if (_scene && _scene->_geom)
+		return _scene->_geom->renderShadowGeometry();
+	else
+#endif
+		return true;
+}
 
 //////////////////////////////////////////////////////////////////////////
 bool AdGame::validMouse() {

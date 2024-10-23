@@ -110,7 +110,10 @@ bool grTileAnimation::compress(grTileCompressionMethod method) {
 
 		uint32 offs = tile_offsets.back();
 		uint32 sz = grTileSprite::compress(data, &*tile_vector.begin(), method);
-		tile_data.insert(tile_data.end(), tile_vector.begin(), tile_vector.begin() + sz);
+
+		for (int j = 0; j < sz; j++)
+			tile_data.push_back(tile_vector[j]);
+
 		tile_offsets.push_back(offs + sz);
 	}
 
@@ -188,7 +191,9 @@ void grTileAnimation::addFrame(const uint32 *frame_data) {
 				uint32 sz = GR_TILE_SPRITE_SIZE;
 				uint32 offs = _tileOffsets.back();
 
-				_tileData.insert(_tileData.end(), tile_vector.begin(), tile_vector.end());
+				for (auto &it : tile_vector)
+					_tileData.push_back(it);
+
 				_tileOffsets.push_back(offs + sz);
 				_frameIndex.push_back(tile_count);
 			} else
@@ -666,10 +671,15 @@ Graphics::ManagedSurface *grTileAnimation::dumpTiles(int tilesPerRow) const {
 void grTileAnimation::dumpTiles(Common::Path basename, int tilesPerRow) const {
 	Common::Path path = Common::Path(Common::String::format("dumps/%s.tiles.png", transCyrillic(basename.baseName())));
 
+	Common::DumpFile bitmapFile;
+	if (!bitmapFile.open(path, true)) {
+		warning("Cannot dump tile into file '%s'", path.toString().c_str());
+		return;
+	}
+
 	Graphics::ManagedSurface *dstSurf = dumpTiles(tilesPerRow);
 
-	Common::DumpFile bitmapFile;
-	bitmapFile.open(path, true);
+
 	Image::writePNG(bitmapFile, *(dstSurf->surfacePtr()));
 	bitmapFile.close();
 

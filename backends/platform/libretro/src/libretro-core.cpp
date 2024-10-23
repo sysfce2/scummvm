@@ -45,6 +45,8 @@
 #define INCLUDED_FROM_BASE_VERSION_CPP
 #include "base/internal_version.h"
 
+#include "graphics/managed_surface.h"
+
 #include "backends/platform/libretro/include/libretro-defs.h"
 #include "backends/platform/libretro/include/libretro-core.h"
 #include "backends/platform/libretro/include/libretro-threads.h"
@@ -81,12 +83,16 @@ char cmd_params_num;
 
 static uint8 video_hw_mode = 0;
 
+static unsigned base_width = RES_W_OVERLAY;
+static unsigned base_height = RES_H_OVERLAY;
+static unsigned max_width = RES_W_OVERLAY;
+static unsigned max_height = RES_H_OVERLAY;
+
 static uint32 current_frame = 0;
 static uint8 frameskip_no;
 static uint8 frameskip_type;
 static uint8 frameskip_threshold;
 static uint32 frameskip_counter = 0;
-static uint8 frameskip_events = 0;
 
 static uint8 audio_status = AUDIO_STATUS_MUTE;
 
@@ -137,7 +143,7 @@ static void setup_hw_rendering(void) {
 			retro_log_cb(RETRO_LOG_WARN, "RETRO_PIXEL_FORMAT_XRGB8888 not supported.\n");
 		hw_render.context_reset = context_reset;
 		hw_render.context_destroy = context_destroy;
-		hw_render.cache_context = true;
+		hw_render.cache_context = false;
 		hw_render.bottom_left_origin = true;
 #if defined(HAVE_OPENGL)
 		hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
@@ -556,7 +562,7 @@ static void update_variables(void) {
 		if (old_frame_rate != frame_rate || old_sample_rate != sample_rate) {
 			audio_buffer_init(sample_rate, (uint16) frame_rate);
 			if (g_system)
-				audio_status |= AUDIO_STATUS_UPDATE_AV_INFO;
+				audio_status |= (AUDIO_STATUS_UPDATE_AV_INFO & AUDIO_STATUS_RESET_PENDING);
 		}
 	}
 
@@ -816,12 +822,26 @@ void retro_get_system_info(struct retro_system_info *info) {
 	info->block_extract = false;
 }
 
+void retro_set_size(unsigned width, unsigned height) {
+	if (base_width == width && base_height == height) {
+		return;
+	} else if (width > max_width || height > max_height) {
+		max_width = width;
+		max_height = height;
+		audio_status |= AUDIO_STATUS_UPDATE_AV_INFO;
+	} else
+		audio_status |= AUDIO_STATUS_UPDATE_GEOMETRY;
+
+	base_width = width;
+	base_height = height;
+}
+
 void retro_get_system_av_info(struct retro_system_av_info *info) {
-	info->geometry.base_width = RES_W;
-	info->geometry.base_height = RES_H;
-	info->geometry.max_width = RES_W;
-	info->geometry.max_height = RES_H;
-	info->geometry.aspect_ratio = 4.0f / 3.0f;
+	info->geometry.base_width = base_width;
+	info->geometry.base_height = base_height;
+	info->geometry.max_width = max_width;
+	info->geometry.max_height = max_height;
+	info->geometry.aspect_ratio = (float)base_width / (float)base_height;
 	info->timing.fps = frame_rate;
 	info->timing.sample_rate = sample_rate;
 }
@@ -1039,10 +1059,19 @@ void retro_run(void) {
 	except in case of core options reset to defaults, for which the following call is needed*/
 	retro_update_options_display();
 
-	if (audio_status & AUDIO_STATUS_UPDATE_AV_INFO) {
+	if (audio_status & (AUDIO_STATUS_UPDATE_AV_INFO | AUDIO_STATUS_UPDATE_GEOMETRY)) {
 		struct retro_system_av_info info;
 		retro_get_system_av_info(&info);
-		environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+		if (audio_status & AUDIO_STATUS_UPDATE_GEOMETRY) {
+			environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &info);
+			audio_status &= ~AUDIO_STATUS_UPDATE_GEOMETRY;
+		} else {
+			environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+			audio_status &= ~AUDIO_STATUS_UPDATE_AV_INFO;
+		}
+#ifdef USE_OPENGL
+			context_reset();
+#endif
 	}
 
 	if (audio_status & AUDIO_STATUS_UPDATE_LATENCY) {
@@ -1059,8 +1088,8 @@ void retro_run(void) {
 		audio_status &= ~AUDIO_STATUS_UPDATE_LATENCY;
 	}
 
-	if (audio_status & AUDIO_STATUS_UPDATE_AV_INFO) {
-		audio_status &= ~AUDIO_STATUS_UPDATE_AV_INFO;
+	if (audio_status & AUDIO_STATUS_RESET_PENDING) {
+		audio_status &= ~AUDIO_STATUS_RESET_PENDING;
 		retro_reset();
 		return;
 	}
@@ -1110,14 +1139,13 @@ void retro_run(void) {
 		/* Retrieve video */
 		if (!skip_frame && (audio_video_enable & 1)) {
 			if (video_hw_mode & VIDEO_GRAPHIC_MODE_REQUEST_SW) {
-				const Graphics::Surface *screen;
+				const Graphics::ManagedSurface *screen;
 				LIBRETRO_G_SYSTEM->getScreen(screen);
 				video_cb(screen->getPixels(), screen->w, screen->h, screen->pitch);
 			} else
 				video_cb(RETRO_HW_FRAME_BUFFER_VALID, LIBRETRO_G_SYSTEM->getScreenWidth(),  LIBRETRO_G_SYSTEM->getScreenHeight(), 0);
 
 		}
-
 		current_frame++;
 
 		poll_cb();
